@@ -1,0 +1,131 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { EntitySearch } from '../../components/EntitySearch';
+import { NodeChip } from '../../components/NodeChip';
+import { useGameStore } from '../../store/gameStore';
+import type { NodeInfo } from '../../types';
+import './GameBoard.css';
+
+export function GameBoard() {
+  const navigate = useNavigate();
+  const { game, addNode, removeLastFromPath, giveUp, submit, endError, stepError } =
+    useGameStore();
+
+  useEffect(() => {
+    if (!game) navigate('/');
+  }, [game, navigate]);
+
+  useEffect(() => {
+    if (game?.status !== 'playing') navigate('/results');
+  }, [game?.status, navigate]);
+
+  if (!game || game.status !== 'playing') return null;
+
+  const { source, target, currentPath } = game;
+
+  // pos 0 = source actor, pos 1 = movie, pos 2 = actor, ...
+  const nextType: 'actor' | 'movie' =
+    currentPath.length % 2 === 0 ? 'actor' : 'movie';
+
+  const lastNode = currentPath[currentPath.length - 1];
+  const canClickTarget = nextType === 'actor' && currentPath.length >= 3;
+  const canSubmit = lastNode.type === 'movie'; // must end on a movie to submit
+
+  const handleSelect = async (node: NodeInfo) => {
+    await addNode(node);
+  };
+
+  const handleTargetClick = async () => {
+    if (!canClickTarget) return;
+    await addNode(target);
+    // Navigation handled by the useEffect watching game.status
+  };
+
+  const handleSubmit = async () => {
+    await submit();
+    // Navigation handled by the useEffect watching game.status
+  };
+
+  const handleGiveUp = async () => {
+    await giveUp();
+    // Navigation handled by the useEffect watching game.status
+  };
+
+  const intermediateNodes = currentPath.slice(1);
+
+  return (
+    <div className="game-board">
+      <header className="game-board__header">
+        <span className="game-board__logo">Connactor</span>
+        <div className="game-board__header-actions">
+          {canSubmit && (
+            <button className="btn btn--primary btn--sm" onClick={handleSubmit}>
+              Submit
+            </button>
+          )}
+          <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>
+            Give Up
+          </button>
+        </div>
+      </header>
+
+      <div className="game-board__actors">
+        <div className="game-board__actor-card">
+          <div className="game-board__actor-label">Start</div>
+          <NodeChip node={source} />
+        </div>
+        <div className="game-board__actor-divider">→</div>
+        <div className="game-board__actor-card">
+          <div className="game-board__actor-label">
+            {canClickTarget ? 'Tap to finish →' : 'Reach'}
+          </div>
+          <div
+            className={canClickTarget ? 'game-board__target--clickable' : ''}
+            onClick={handleTargetClick}
+          >
+            <NodeChip node={target} faded={!canClickTarget} />
+          </div>
+        </div>
+      </div>
+
+      {intermediateNodes.length > 0 && (
+        <div className="game-board__chain">
+          <div className="game-board__chain-scroll">
+            {intermediateNodes.map((node, i) => (
+              <span key={`${node.id}-${i}`} className="game-board__chain-entry">
+                <span className="game-board__chain-arrow">→</span>
+                <NodeChip
+                  node={node}
+                  removable={i === intermediateNodes.length - 1}
+                  onRemove={removeLastFromPath}
+                />
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {endError && (
+        <div className="game-board__error">{endError}</div>
+      )}
+
+      <div className="game-board__search">
+        <EntitySearch mode={nextType} onSelect={handleSelect} />
+      </div>
+
+      {stepError && (
+        <div className="game-board__step-error">{stepError}</div>
+      )}
+
+      <div className="game-board__hint">
+        {(() => {
+          const last = currentPath[currentPath.length - 1];
+          const lastLabel = last.year ? `${last.label} (${last.year})` : last.label;
+          return nextType === 'movie'
+            ? `Type a movie that ${lastLabel} appeared in`
+            : `Type an actor who appeared in ${lastLabel}`;
+        })()}
+      </div>
+    </div>
+  );
+}

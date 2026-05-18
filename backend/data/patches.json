@@ -1,0 +1,17 @@
+[
+  {
+    "actor_nconst": "nm0269463",
+    "movie_tconst": "tt0319343",
+    "note": "Jon Favreau in Elf (2003) — IMDB lists him as director only, but he appears on screen"
+  },
+  {
+    "actor_nconst": "nm0001804",
+    "movie_tconst": "tt1282140",
+    "note": "Stanley Tucci in Easy A (2010) — IMDB does not list him as actor/actress in principals"
+  },
+  {
+    "actor_nconst": "nm2143282",
+    "movie_tconst": "tt2024544",
+    "note": "Lupita Nyong'o in 12 Years a Slave (2013) — not listed in IMDB principals despite winning the Oscar for it"
+  }
+]

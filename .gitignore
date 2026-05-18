@@ -1,0 +1,13 @@
+# IMDB raw data (large files, re-downloadable)
+backend/data/raw/
+backend/data/processed/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Node
+frontend/node_modules/
+frontend/dist/

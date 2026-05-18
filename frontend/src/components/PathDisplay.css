@@ -1,0 +1,35 @@
+.path-display {
+  width: 100%;
+}
+
+.path-display--dim {
+  opacity: 0.6;
+}
+
+.path-display__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.path-display__chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.path-display__entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.path-display__arrow {
+  color: #555;
+  font-size: 16px;
+  flex-shrink: 0;
+}
