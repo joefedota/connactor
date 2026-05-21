@@ -3,19 +3,19 @@
 ## Phase 0 — TMDB Data Validation
 **Goal:** Verify TMDB has the cast coverage we need before committing to it as our data source.
 
-- [ ] Get TMDB API key (free at themoviedb.org/settings/api)
-- [ ] Write a validation script that samples ~50 well-known movies and checks cast count per film
-- [ ] Cross-reference a handful of movies against current IMDB-principals graph to compare edge counts
-- [ ] Verify TMDB daily movie ID export is accessible and parseable
-- [ ] Confirm `/movie/changes` endpoint gives usable delta for incremental refresh
-- [ ] Decision: proceed with TMDB or find a hybrid approach
+- [x] Get TMDB API key (free at themoviedb.org/settings/api)
+- [x] Write a validation script that samples ~50 well-known movies and checks cast count per film
+- [x] Cross-reference a handful of movies against current IMDB-principals graph to compare edge counts
+- [x] Verify TMDB daily movie ID export is accessible and parseable
+- [x] Confirm `/movie/changes` endpoint gives usable delta for incremental refresh
+- [x] Decision: proceed with TMDB or find a hybrid approach
 
 ## Phase 1 — Graph DB Foundation
 **Goal:** Replace in-memory NetworkX graph with persistent Neo4j backed by TMDB data.
 
-- [ ] Add Neo4j to Docker Compose (local dev)
-- [ ] Write TMDB movie ID export downloader
-- [ ] Write async TMDB credits crawler (`/movie/{id}/credits`)
+- [x] Add Neo4j to Docker Compose (local dev)
+- [x] Write TMDB movie ID export downloader
+- [x] Write async TMDB credits crawler (`/movie/{id}/credits`)
 - [ ] Write async TMDB person enricher (`/person/{id}`)
 - [ ] Write Neo4j bulk data loader (initial full load)
 - [ ] Write daily delta refresh job (`/movie/changes`)
