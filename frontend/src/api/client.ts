@@ -1,10 +1,10 @@
 import type {
   AutocompleteResponse,
   GameResponse,
-  NodeInfo,
   SolveResponse,
   ValidateResponse,
 } from '../types';
+
 
 const BASE = '/api';
 

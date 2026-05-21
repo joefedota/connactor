@@ -175,7 +175,7 @@ def test_validate_nonexistent_edge(G):
     # nmA and tt2 are not connected
     valid, msg = validate_path(G, ["nmA", "tt2", "nmC"], "nmA", "nmC")
     assert not valid
-    assert "No edge" in msg
+    assert "did not appear" in msg
 
 
 def test_validate_wrong_start(G):
@@ -222,6 +222,6 @@ def test_path_to_display(G):
     result = path_to_display(G, ["nmA", "tt1", "nmB"])
     assert result == [
         {"type": "actor", "id": "nmA", "label": "Alice"},
-        {"type": "movie", "id": "tt1", "label": "Film One"},
+        {"type": "movie", "id": "tt1", "label": "Film One", "year": None},
         {"type": "actor", "id": "nmB", "label": "Bob"},
     ]

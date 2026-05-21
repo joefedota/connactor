@@ -39,7 +39,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 
 export function Home() {
   const navigate = useNavigate();
-  const { fetchGame, isLoading, error } = useGameStore();
+  const { fetchGame, isLoading, endError } = useGameStore();
   const [showHowTo, setShowHowTo] = useState(false);
 
   const handleStart = async () => {
@@ -55,7 +55,8 @@ export function Home() {
           Connect two actors through shared movies.
         </p>
 
-        {error && <div className="home__error">{error}</div>}
+        {endError && <div className="home__error">{endError}</div>}
+
 
         <button
           className="btn btn--primary btn--large"
