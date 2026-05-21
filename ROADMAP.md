@@ -32,14 +32,17 @@
 - [ ] All 25 existing tests passing against Neo4j
 
 ## Phase 3 — Production Infrastructure
-**Goal:** Running on GCP, automated deploys, data stays safe.
+**Goal:** API on Cloud Run, database server on Compute Engine, secrets in Secret Manager, automated deploys.
 
-- [ ] GCP Compute Engine VM (e2-highmem-2) + 100 GB persistent disk
-- [ ] GCP snapshot schedule (daily backups)
-- [ ] Docker Compose production config (Nginx + TLS via Let's Encrypt)
-- [ ] GitHub Actions CI/CD (test → build → deploy)
-- [ ] Cloudflare Pages for frontend
-- [ ] Environment secrets management
+- [ ] Enable GCP APIs (Cloud Run, Artifact Registry, Secret Manager, Compute Engine)
+- [ ] Compute Engine VM (e2-highmem-2) + 100 GB persistent disk + daily snapshot schedule
+- [ ] Docker Compose on VM for Neo4j + Redis (database server only)
+- [ ] VPC networking: Cloud Run Direct VPC Egress → VM (Neo4j :7687, Redis :6379 internal only)
+- [ ] GCP Secret Manager: create secrets, bind to Cloud Run service account via IAM
+- [ ] Containerise FastAPI (Dockerfile) + push to Artifact Registry
+- [ ] Cloud Run service: secrets mounted as env vars, VPC egress enabled
+- [ ] GitHub Actions CI/CD: test → build → push to Artifact Registry → deploy to Cloud Run
+- [ ] Cloudflare Pages for frontend + custom domain DNS
 
 ## Phase 4 — Images + Polish
 **Goal:** Actor headshots and movie posters in the UI.
