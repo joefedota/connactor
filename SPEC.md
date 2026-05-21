@@ -38,23 +38,26 @@ Connactor generates a pair of actors and challenges players to build a chain con
 ## Data
 
 ### Source
-IMDB bulk TSV dumps from datasets.imdbws.com — free, updated daily.
+TMDB API (themoviedb.org) — free API key, full cast lists per film, daily exports, incremental change feed.
 
-| File | Used for |
-|------|----------|
-| `title.basics.tsv.gz` | Movie titles, filtered to titleType=movie |
-| `title.principals.tsv.gz` | Actor–movie edges |
-| `name.basics.tsv.gz` | Actor names and birth years |
-| `title.ratings.tsv.gz` | Vote counts, used to filter starting actor pool |
+| Endpoint / File | Used for |
+|-----------------|----------|
+| `files.tmdb.org/p/exports/movie_ids_*.json.gz` | Full list of movie IDs (daily export, no auth required) |
+| `GET /movie/{id}/credits` | Full cast per movie (all credited actors, not just principals) |
+| `GET /person/{id}` | Actor name, popularity score, profile image path |
+| `GET /movie/changes` | Delta of movies changed in last 24h (for incremental refresh) |
+
+**Why TMDB over IMDB:** IMDB's free bulk TSV exports only include *principal* cast (~10–15 top-billed per film). TMDB's credits endpoint returns all cast in their database — typically 50–200+ for popular films. More edges = more valid paths = better gameplay. See decision log entries #7 and #13.
 
 ### Graph filters (applied at ingest time)
-- titleType = `movie` only (no TV, shorts)
-- category in `{actor, actress}` only
+- Movies with `vote_count > 50` and `popularity > 1.0` only (~150–200k qualifying films)
+- Cast members with `known_for_department = Acting` only
 - Actors with ≥ 5 qualifying movie credits
 
 ### Starting actor pool filter (applied at pair generation time)
-- Starting actors are the top 500 actors ranked by **aggregate IMDB vote count across their entire filmography**
-- This applies only to puzzle start/end actors — the full graph is still used during gameplay, so players can route through any movie or actor
+- Starting actors are the top N actors ranked by **TMDB popularity score**
+- Pool size varies by difficulty tier (see Difficulty Tiers below)
+- This applies only to puzzle start/end actors — the full graph is used during gameplay
 
 ---
 
@@ -71,13 +74,16 @@ Bipartite graph: actor nodes + movie nodes, edges = actor appeared in movie.
 
 ## Tech Stack
 
-| Layer | Choice |
-|-------|--------|
-| Frontend | React 18 + TypeScript, Vite, Zustand, React Router, mobile-first CSS |
-| Backend | Python + FastAPI, NetworkX bipartite graph in memory |
-| Data | IMDB bulk TSV dumps, parsed at ingest time |
-| Autocomplete | In-memory Trie with diacritic normalization and word-level indexing |
-| Auth | None (v1) |
+| Layer | v1 (current) | Production (target) |
+|-------|-------------|-------------------|
+| Frontend | React 18 + TypeScript, Vite, Zustand, React Router | Unchanged — deployed to Cloudflare Pages |
+| Backend | Python + FastAPI, NetworkX bipartite graph in memory | FastAPI + Neo4j async driver (stateless, ~1s startup) |
+| Graph DB | NetworkX in-memory (~1–2 GB RAM, single process) | Neo4j Community Edition (persistent, multi-server capable) |
+| Data source | IMDB bulk TSV dumps (principals only, ~10–15 cast/film) | TMDB API (full cast, ~50–200/film) |
+| Autocomplete | In-memory Trie (custom implementation) | Neo4j full-text indexes (Lucene-backed) |
+| Caching | None | Redis (pair pool + solve results) |
+| Hosting | Local only | GCP Compute Engine + Cloudflare Pages |
+| Auth | None (v1) | None (v1) — JWT in v2 |
 
 ---
 
@@ -140,9 +146,12 @@ Candidates to keep:
 | 4 | Validate actor steps immediately via `/connected`; movies are unconstrained | Gives instant feedback when an actor wasn't in the preceding movie, without blocking free movie exploration. Movie validation would remove creative routing. |
 | 5 | Live BFS at `/game` time, no pre-generated pairs | Pre-generation limits variety to a fixed pool and adds an offline script dependency. BFS on the in-memory graph is fast (< 100 ms); retrying a few random pairs until a 2–6 hop pair is found is trivially cheap. |
 | 6 | Starting actors = top 500 by aggregate IMDB vote count across filmography (movies only, TV excluded) | Better signal of sustained popularity than a single-movie threshold. Iterated: tried per-movie thresholds (5k, 20k votes), settled on top-500 aggregate ranking. TV ratings excluded because the graph only contains movie nodes. Full graph is unfiltered so gameplay is unrestricted. |
-| 7 | IMDB vote count as box office proxy | TMDB API requires a business account. IMDB's `title.ratings.tsv.gz` is free, bulk, and vote count is a reliable proxy for commercial reach. |
-| 8 | NetworkX bipartite graph in memory, no database | Simple and fast for v1. ~1–2 GB RAM for the full graph. Swap to a graph DB only if multi-server or memory becomes a constraint. |
+| 7 | IMDB vote count as box office proxy (v1) | At v1 build time TMDB API access was assumed to require a business account. IMDB's `title.ratings.tsv.gz` is free and bulk. This decision is superseded by #13. |
+| 8 | NetworkX bipartite graph in memory, no database | Simple and fast for v1. ~1–2 GB RAM for the full graph. Swap to a graph DB only if multi-server or memory becomes a constraint. Superseded by #14. |
 | 9 | Blocklist deferred to v1.5 | Not critical for core gameplay; adds complexity to ingest. Human-editable JSON so it can be added without a code deploy when ready. |
 | 10 | No difficulty tiers in v1 | Adds UI and pair-generation complexity without clear player benefit at launch. Can add later once hop distribution is understood. |
 | 11 | No auth in v1 | Reduces friction to zero. Multiplayer (v2) is where auth becomes necessary for scoring persistence. |
 | 12 | Autocomplete shows release year for movies | Disambiguates remakes and multiple versions of the same title in the dropdown (e.g. two "La La Land" entries). Year stored on movie nodes at ingest and surfaced in all NodeInfo responses. |
+| 13 | Switch data source from IMDB to TMDB | IMDB free TSV dumps only include principal cast (~10–15 per film). TMDB's `/movie/{id}/credits` returns all credited cast (50–200+ for popular films), giving the graph significantly more edges and gameplay paths. TMDB offers a free API key with ~40 req/s and a daily movie ID export file. |
+| 14 | Switch from NetworkX in-memory to Neo4j graph DB | Removes 1–2 GB RAM requirement, eliminates 15–30s cold start, enables horizontal scaling, and gives native Cypher `shortestPath` / `allShortestPaths` instead of custom BFS. Neo4j Community Edition is free; self-hosted on GCP at ~$75/mo vs $650–975/mo for managed AuraDB. |
+| 15 | Self-hosted Neo4j on GCP VM, not AuraDB managed | AuraDB Professional costs ~$65/GB/month. The production dataset (~10–15 GB) would cost $650–975/mo. Self-hosting on a GCP e2-highmem-2 VM with a persistent disk costs ~$75/mo total. Data safety achieved via GCP snapshot schedule (daily, 7-day retention) rather than managed backup. |
