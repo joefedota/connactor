@@ -2,6 +2,9 @@
 backend/data/raw/
 backend/data/processed/
 
+# Neo4j dump files (stored in GCS, not committed)
+data/dumps/
+
 # Python
 __pycache__/
 *.pyc
