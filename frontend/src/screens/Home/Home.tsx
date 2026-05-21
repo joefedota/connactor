@@ -37,15 +37,26 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+const DIFFICULTIES = [
+  { id: 'random', label: 'Random', desc: 'Fully random path length and actor pool.', color: '#888888' },
+  { id: 'easy', label: 'Easy', desc: 'Connect two Super Famous stars in exactly 2 hops (1 movie).', color: '#10b981' },
+  { id: 'medium', label: 'Medium', desc: 'Connect famous actors in 4 hops or fewer.', color: '#3b82f6' },
+  { id: 'hard', label: 'Hard', desc: 'Connect moderately known actors in 6 hops or fewer.', color: '#f59e0b' },
+  { id: 'expert', label: 'Expert', desc: 'Unrestricted paths and actor pool. Obscure names allowed!', color: '#ef4444' },
+];
+
 export function Home() {
   const navigate = useNavigate();
   const { fetchGame, isLoading, endError } = useGameStore();
   const [showHowTo, setShowHowTo] = useState(false);
+  const [difficulty, setDifficulty] = useState<string>('random');
 
   const handleStart = async () => {
-    await fetchGame();
+    await fetchGame(difficulty === 'random' ? undefined : difficulty);
     navigate('/game');
   };
+
+  const activeDiff = DIFFICULTIES.find((d) => d.id === difficulty) || DIFFICULTIES[0];
 
   return (
     <div className="home">
@@ -57,13 +68,39 @@ export function Home() {
 
         {endError && <div className="home__error">{endError}</div>}
 
+        <div className="difficulty-container">
+          <div className="difficulty-label">Select Difficulty</div>
+          <div className="difficulty-tabs">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                className={`difficulty-tab ${difficulty === d.id ? 'is-active' : ''}`}
+                onClick={() => setDifficulty(d.id)}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <div className="difficulty-info-card">
+            <div className="difficulty-info-card-inner">
+              <span className="difficulty-badge" style={{ borderColor: activeDiff.color, color: activeDiff.color }}>
+                {activeDiff.label.toUpperCase()}
+              </span>
+              <p className="difficulty-info-desc">
+                {activeDiff.desc}
+              </p>
+            </div>
+          </div>
+        </div>
 
         <button
           className="btn btn--primary btn--large"
           onClick={handleStart}
           disabled={isLoading}
+          style={{ width: '100%' }}
         >
-          {isLoading ? 'Loading…' : 'Start Game'}
+          {isLoading ? 'Loading Game…' : 'Start Game'}
         </button>
 
         <button

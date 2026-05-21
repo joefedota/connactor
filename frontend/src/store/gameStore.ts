@@ -8,7 +8,7 @@ interface GameStore {
   endError: string | null;
   stepError: string | null;  // shown when actor isn't in the last movie
 
-  fetchGame: () => Promise<void>;
+  fetchGame: (difficulty?: string) => Promise<void>;
   addNode: (node: NodeInfo) => Promise<void>;
   removeLastFromPath: () => void;
   submit: () => Promise<void>;
@@ -22,10 +22,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   endError: null,
   stepError: null,
 
-  fetchGame: async () => {
+  fetchGame: async (difficulty?: string) => {
     set({ isLoading: true, endError: null });
     try {
-      const resp = await api.fetchGame();
+      const resp = await api.fetchGame(difficulty);
       set({
         game: {
           gameId: resp.game_id,
@@ -35,6 +35,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           status: 'playing',
           isOptimal: null,
           allPaths: null,
+          difficulty: resp.difficulty,
         },
         isLoading: false,
       });

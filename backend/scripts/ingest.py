@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import math
 import pickle
 import urllib.request
 from pathlib import Path
@@ -134,9 +135,27 @@ def build_graph(
     return G
 
 
+def calculate_actor_popularity(G: nx.Graph, vote_counts: dict[str, int]) -> None:
+    """Compute a popularity score (0.0 to 10.0) for every actor based on filmography votes."""
+    for node_id, data in G.nodes(data=True):
+        if data.get("type") != "actor":
+            continue
+        # Get vote counts for all movie neighbors
+        movie_votes = [vote_counts.get(nbr, 0) for nbr in G.neighbors(node_id)]
+        if not movie_votes:
+            data["popularity"] = 0.0
+            continue
+        # Take average of top 3 highest-voted movies
+        movie_votes.sort(reverse=True)
+        top_3 = movie_votes[:3]
+        avg_votes = sum(top_3) / len(top_3)
+        # Logarithmic popularity rating
+        data["popularity"] = round(math.log10(avg_votes + 1), 2)
+
+
 def build_actor_index(G: nx.Graph) -> list[dict]:
     actors = [
-        {"id": n, "label": d["name"], "type": "actor"}
+        {"id": n, "label": d["name"], "type": "actor", "popularity": d.get("popularity", 0.0)}
         for n, d in G.nodes(data=True)
         if d.get("type") == "actor"
     ]
@@ -194,6 +213,10 @@ def main() -> None:
     print("\n[5/5] Building graph...")
     G = build_graph(credits, actor_metadata, movie_titles)
 
+    print("\nLoading vote counts and calculating popularity...")
+    vote_counts = load_vote_counts(RAW_DIR / "title.ratings.tsv.gz")
+    calculate_actor_popularity(G, vote_counts)
+
     graph_path = PROCESSED_DIR / "graph.pkl"
     with open(graph_path, "wb") as f:
         pickle.dump(G, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -204,13 +227,13 @@ def main() -> None:
         json.dump(actor_index, f)
     print(f"  Wrote actor_index.json ({len(actor_index):,} actors)")
 
-    vote_counts = load_vote_counts(RAW_DIR / "title.ratings.tsv.gz")
     movie_index = build_movie_index(G, vote_counts)
     with open(PROCESSED_DIR / "movie_index.json", "w") as f:
         json.dump(movie_index, f)
     print(f"  Wrote movie_index.json ({len(movie_index):,} movies)")
 
     print("\nDone. Run generate_pairs.py next.")
+
 
 
 if __name__ == "__main__":

@@ -56,7 +56,12 @@ export function GameBoard() {
   return (
     <div className="game-board">
       <header className="game-board__header">
-        <span className="game-board__logo">Connactor</span>
+        <div className="game-board__header-left">
+          <span className="game-board__logo">Connactor</span>
+          <span className={`difficulty-pill difficulty-pill--${game.difficulty}`}>
+            {game.difficulty}
+          </span>
+        </div>
         <div className="game-board__header-actions">
           {canSubmit && (
             <button className="btn btn--primary btn--sm" onClick={handleSubmit}>

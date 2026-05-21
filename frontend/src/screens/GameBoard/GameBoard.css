@@ -125,3 +125,40 @@
   font-size: 13px;
   color: #555;
 }
+
+.game-board__header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.difficulty-pill {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1.5px solid;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.difficulty-pill--easy {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.difficulty-pill--medium {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.difficulty-pill--hard {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.difficulty-pill--expert {
+  border-color: #ef4444;
+  color: #ef4444;
+}

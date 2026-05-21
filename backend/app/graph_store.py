@@ -19,7 +19,7 @@ import networkx as nx
 
 from app.autocomplete import Trie, build_trie
 
-TOP_ACTORS = 500
+TOP_ACTORS = 5000
 
 
 @dataclass

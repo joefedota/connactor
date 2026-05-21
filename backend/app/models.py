@@ -11,12 +11,14 @@ class NodeInfo(BaseModel):
     id: str     # nconst or tconst
     label: str  # actor name or movie title
     year: Optional[str] = None  # movies only
+    popularity: Optional[float] = None  # actors only
 
 
 class GameResponse(BaseModel):
     game_id: str
     source: NodeInfo
     target: NodeInfo
+    difficulty: str
 
 
 class ValidateRequest(BaseModel):

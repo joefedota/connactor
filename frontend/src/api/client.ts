@@ -20,7 +20,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export function fetchGame(): Promise<GameResponse> {
+export function fetchGame(difficulty?: string): Promise<GameResponse> {
+  if (difficulty) {
+    const params = new URLSearchParams({ difficulty });
+    return request(`/game?${params}`);
+  }
   return request('/game');
 }
 
