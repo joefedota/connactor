@@ -266,27 +266,27 @@ async def get_autocomplete(
         if type == "actor":
             result = await session.run(
                 """
-                CALL db.index.fulltext.queryNodes('actorNames', $query)
+                CALL db.index.fulltext.queryNodes('actorNames', $search)
                 YIELD node, score
                 RETURN node.person_id AS id, node.name AS label,
                        node.popularity AS popularity, node.profile_path AS profile_path
                 ORDER BY node.popularity DESC
                 LIMIT $limit
                 """,
-                query=q + "*",
+                search=q + "*",
                 limit=limit,
             )
         else:
             result = await session.run(
                 """
-                CALL db.index.fulltext.queryNodes('movieTitles', $query)
+                CALL db.index.fulltext.queryNodes('movieTitles', $search)
                 YIELD node, score
                 RETURN node.movie_id AS id, node.title AS label,
                        node.year AS year, node.vote_count AS vote_count
                 ORDER BY node.vote_count DESC
                 LIMIT $limit
                 """,
-                query=q + "*",
+                search=q + "*",
                 limit=limit,
             )
         records = await result.data()
