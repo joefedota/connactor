@@ -369,12 +369,17 @@ async def get_connected(
     a: str = Query(...),
     b: str = Query(...),
 ):
+    # The frontend calls this with adjacent path nodes (always actor+movie in either order).
+    # Try both orderings so either (actor_id, movie_id) or (movie_id, actor_id) works.
     driver = request.app.state.neo4j
     async with driver.session() as session:
         result = await session.run(
             """
-            MATCH (a:Actor {person_id: $a})-[:APPEARED_IN]->(m:Movie)<-[:APPEARED_IN]-(b:Actor {person_id: $b})
-            RETURN count(m) > 0 AS connected
+            RETURN EXISTS {
+                MATCH (:Actor {person_id: $a})-[:APPEARED_IN]->(:Movie {movie_id: $b})
+            } OR EXISTS {
+                MATCH (:Actor {person_id: $b})-[:APPEARED_IN]->(:Movie {movie_id: $a})
+            } AS connected
             """,
             a=int(a),
             b=int(b),

@@ -1,426 +1,326 @@
 #!/usr/bin/env python3
 """
-Debug tool to check whether an actor appears in the cast list of a movie,
-checking both the processed graph and the original raw IMDB database.
+Debug tool: check whether an actor-movie connection exists in the Neo4j DB,
+then cross-reference against the TMDB API to explain why it might be missing.
 
-Usage:
-    uv run scripts/check_cast.py
-    uv run scripts/check_cast.py --actor "Leonardo DiCaprio" --movie "Inception"
+Three reasons a real connection can be absent from our DB:
+  1. Movie not in our crawled set (filtered by vote_count/popularity at ingest time)
+  2. Actor's known_for_department != "Acting" on TMDB
+  3. Actor has < 5 credits in our crawled movie set (MIN_CREDITS threshold)
+
+Usage (from backend/):
+    uv run python scripts/check_cast.py --actor "Jon Bernthal" --movie "Wolf of Wall Street"
 """
 from __future__ import annotations
 
 import argparse
-import gzip
-import json
-import pickle
 import sys
 from pathlib import Path
 
-RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
-PROCESSED_DIR = Path(__file__).parent.parent / "data" / "processed"
+import httpx
+from neo4j import GraphDatabase
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from settings import settings
 
 MIN_CREDITS = 5
-VALID_CATEGORIES = {"actor", "actress"}
+TMDB_BASE = "https://api.themoviedb.org/3"
+HEADERS = {"Authorization": f"Bearer {settings.tmdb_api_read_token}"}
 
 
-def load_processed_data() -> tuple[any, list[dict], list[dict]]:
-    graph_path = PROCESSED_DIR / "graph.pkl"
-    actor_path = PROCESSED_DIR / "actor_index.json"
-    movie_path = PROCESSED_DIR / "movie_index.json"
+# ---------------------------------------------------------------------------
+# Neo4j helpers (sync driver — simpler for a one-shot script)
+# ---------------------------------------------------------------------------
 
-    G = None
-    actor_index = []
-    movie_index = []
-
-    if graph_path.exists():
-        print("Loading graph.pkl...")
-        try:
-            with open(graph_path, "rb") as f:
-                G = pickle.load(f)
-        except Exception as e:
-            print(f"  Warning: Could not load graph.pkl: {e}")
-    
-    if actor_path.exists():
-        print("Loading actor_index.json...")
-        try:
-            with open(actor_path) as f:
-                actor_index = json.load(f)
-        except Exception as e:
-            print(f"  Warning: Could not load actor_index.json: {e}")
-
-    if movie_path.exists():
-        print("Loading movie_index.json...")
-        try:
-            with open(movie_path) as f:
-                movie_index = json.load(f)
-        except Exception as e:
-            print(f"  Warning: Could not load movie_index.json: {e}")
-
-    return G, actor_index, movie_index
+def _neo4j_driver():
+    return GraphDatabase.driver(
+        settings.neo4j_uri,
+        auth=(settings.neo4j_user, settings.neo4j_password),
+    )
 
 
-def find_actor_in_raw(name_query: str) -> list[dict]:
-    path = RAW_DIR / "name.basics.tsv.gz"
-    if not path.exists():
-        print(f"Error: Raw file {path} not found. Run ingestion first.")
-        return []
-
-    print(f"Searching raw {path.name} for actor matching '{name_query}'...")
-    matches = []
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip().split("\t")
-        idx_nconst = header.index("nconst")
-        idx_name = header.index("primaryName")
-        idx_birth = header.index("birthYear")
-        idx_profession = header.index("primaryProfession")
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            name = parts[idx_name]
-            if name_query.lower() in name.lower() or name_query == parts[idx_nconst]:
-                # Check if actor/actress profession is listed (loose check)
-                professions = parts[idx_profession]
-                matches.append({
-                    "id": parts[idx_nconst],
-                    "name": name,
-                    "birth_year": None if parts[idx_birth] == "\\N" else parts[idx_birth],
-                    "professions": professions,
-                    "type": "raw"
-                })
-                if len(matches) >= 10:
-                    print("  (Found 10+ raw matches, truncating search...)")
-                    break
-    return matches
+def neo4j_search_actors(driver, name: str) -> list[dict]:
+    with driver.session() as s:
+        result = s.run(
+            "CALL db.index.fulltext.queryNodes('actorNames', $search) "
+            "YIELD node, score "
+            "RETURN node.person_id AS id, node.name AS name, "
+            "       node.popularity AS popularity, node.rank AS rank "
+            "ORDER BY node.popularity DESC LIMIT 5",
+            search=name + "*",
+        )
+        return [dict(r) for r in result]
 
 
-def find_movie_in_raw(title_query: str) -> list[dict]:
-    path = RAW_DIR / "title.basics.tsv.gz"
-    if not path.exists():
-        print(f"Error: Raw file {path} not found. Run ingestion first.")
-        return []
-
-    print(f"Searching raw {path.name} for movie matching '{title_query}'...")
-    matches = []
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip().split("\t")
-        idx_tconst = header.index("tconst")
-        idx_type = header.index("titleType")
-        idx_title = header.index("primaryTitle")
-        idx_year = header.index("startYear")
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            title = parts[idx_title]
-            if title_query.lower() in title.lower() or title_query == parts[idx_tconst]:
-                matches.append({
-                    "id": parts[idx_tconst],
-                    "title": title,
-                    "title_type": parts[idx_type],
-                    "year": None if parts[idx_year] == "\\N" else parts[idx_year],
-                    "type": "raw"
-                })
-                if len(matches) >= 10:
-                    print("  (Found 10+ raw matches, truncating search...)")
-                    break
-    return matches
+def neo4j_search_movies(driver, title: str) -> list[dict]:
+    with driver.session() as s:
+        result = s.run(
+            "CALL db.index.fulltext.queryNodes('movieTitles', $search) "
+            "YIELD node, score "
+            "RETURN node.movie_id AS id, node.title AS title, node.year AS year "
+            "ORDER BY node.vote_count DESC LIMIT 5",
+            search=title + "*",
+        )
+        return [dict(r) for r in result]
 
 
-def get_movie_raw_info(tconst: str) -> dict | None:
-    path = RAW_DIR / "title.basics.tsv.gz"
-    if not path.exists():
+def neo4j_edge_exists(driver, person_id: int, movie_id: int) -> bool:
+    with driver.session() as s:
+        result = s.run(
+            "MATCH (a:Actor {person_id: $pid})-[:APPEARED_IN]->(m:Movie {movie_id: $mid}) "
+            "RETURN count(*) > 0 AS ok",
+            pid=person_id,
+            mid=movie_id,
+        )
+        record = result.single()
+        return bool(record and record["ok"])
+
+
+def neo4j_actor_exists(driver, person_id: int) -> bool:
+    with driver.session() as s:
+        result = s.run(
+            "MATCH (a:Actor {person_id: $pid}) RETURN a.name AS name",
+            pid=person_id,
+        )
+        return result.single() is not None
+
+
+def neo4j_movie_exists(driver, movie_id: int) -> bool:
+    with driver.session() as s:
+        result = s.run(
+            "MATCH (m:Movie {movie_id: $mid}) RETURN m.title AS title",
+            mid=movie_id,
+        )
+        return result.single() is not None
+
+
+def neo4j_actor_credit_count(driver, person_id: int) -> int:
+    with driver.session() as s:
+        result = s.run(
+            "MATCH (a:Actor {person_id: $pid})-[:APPEARED_IN]->() RETURN count(*) AS n",
+            pid=person_id,
+        )
+        record = result.single()
+        return record["n"] if record else 0
+
+
+# ---------------------------------------------------------------------------
+# TMDB helpers
+# ---------------------------------------------------------------------------
+
+def tmdb_search_movie(title: str) -> list[dict]:
+    resp = httpx.get(
+        f"{TMDB_BASE}/search/movie",
+        headers=HEADERS,
+        params={"query": title, "include_adult": "false"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json().get("results", [])[:5]
+
+
+def tmdb_search_person(name: str) -> list[dict]:
+    resp = httpx.get(
+        f"{TMDB_BASE}/search/person",
+        headers=HEADERS,
+        params={"query": name},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json().get("results", [])[:5]
+
+
+def tmdb_movie_credits(movie_id: int) -> list[dict]:
+    resp = httpx.get(
+        f"{TMDB_BASE}/movie/{movie_id}/credits",
+        headers=HEADERS,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json().get("cast", [])
+
+
+# ---------------------------------------------------------------------------
+# Interactive selection
+# ---------------------------------------------------------------------------
+
+def _select(items: list[dict], label_fn, kind: str, query: str) -> dict | None:
+    if not items:
         return None
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip().split("\t")
-        idx_tconst = header.index("tconst")
-        idx_type = header.index("titleType")
-        idx_title = header.index("primaryTitle")
-        idx_year = header.index("startYear")
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            if parts[idx_tconst] == tconst:
-                return {
-                    "id": tconst,
-                    "title": parts[idx_title],
-                    "title_type": parts[idx_type],
-                    "year": None if parts[idx_year] == "\\N" else parts[idx_year],
-                }
-    return None
-
-
-def get_actor_raw_info(nconst: str) -> dict | None:
-    path = RAW_DIR / "name.basics.tsv.gz"
-    if not path.exists():
-        return None
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip().split("\t")
-        idx_nconst = header.index("nconst")
-        idx_name = header.index("primaryName")
-        idx_birth = header.index("birthYear")
-        idx_profession = header.index("primaryProfession")
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            if parts[idx_nconst] == nconst:
-                return {
-                    "id": nconst,
-                    "name": parts[idx_name],
-                    "birth_year": None if parts[idx_birth] == "\\N" else parts[idx_birth],
-                    "professions": parts[idx_profession],
-                }
-    return None
-
-
-def scan_raw_principals_for_actor(nconst: str) -> list[dict]:
-    path = RAW_DIR / "title.principals.tsv.gz"
-    if not path.exists():
-        return []
-    print(f"Scanning raw principals list for actor {nconst} (this may take 10-15 seconds)...")
-    credits = []
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip().split("\t")
-        idx_tconst = header.index("tconst")
-        idx_nconst = header.index("nconst")
-        idx_category = header.index("category")
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            if parts[idx_nconst] == nconst:
-                credits.append({
-                    "tconst": parts[idx_tconst],
-                    "category": parts[idx_category]
-                })
-    return credits
-
-
-def check_relationship_in_raw_principals(tconst: str, nconst: str) -> dict | None:
-    path = RAW_DIR / "title.principals.tsv.gz"
-    if not path.exists():
-        return None
-    print(f"Scanning raw principals list for specific link between {nconst} and {tconst}...")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip().split("\t")
-        idx_tconst = header.index("tconst")
-        idx_nconst = header.index("nconst")
-        idx_category = header.index("category")
-        for line in f:
-            parts = line.rstrip("\n").split("\t")
-            if parts[idx_tconst] == tconst and parts[idx_nconst] == nconst:
-                return {
-                    "category": parts[idx_category]
-                }
-    return None
-
-
-def select_item(matches: list[dict], query_name: str, item_type: str) -> dict | None:
-    if not matches:
-        return None
-    if len(matches) == 1:
-        return matches[0]
-
-    print(f"\nMultiple raw/processed matches found for {item_type} '{query_name}':")
-    for idx, m in enumerate(matches):
-        source = m.get("type", "processed").upper()
-        if item_type == "actor":
-            birth = f", born {m['birth_year']}" if m.get("birth_year") else ""
-            print(f"  [{idx + 1}] {m['name']}{birth} [{m['id']}] (Source: {source})")
-        else:
-            year = f" ({m['year']})" if m.get("year") else ""
-            info = f" - type: {m['title_type']}" if m.get("title_type") else ""
-            print(f"  [{idx + 1}] {m['title']}{year}{info} [{m['id']}] (Source: {source})")
-    
+    if len(items) == 1:
+        print(f"  Found: {label_fn(items[0])}")
+        return items[0]
+    print(f"\nMultiple matches for {kind} '{query}':")
+    for i, item in enumerate(items):
+        print(f"  [{i + 1}] {label_fn(item)}")
     while True:
+        choice = input(f"Select (1-{len(items)}) or Enter to skip: ").strip()
+        if not choice:
+            return None
         try:
-            choice = input(f"\nSelect a choice (1-{len(matches)}) or Enter to skip: ").strip()
-            if not choice:
-                return None
             idx = int(choice) - 1
-            if 0 <= idx < len(matches):
-                return matches[idx]
+            if 0 <= idx < len(items):
+                return items[idx]
         except ValueError:
             pass
-        print("Invalid choice. Try again.")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Connactor cast diagnostic tool")
-    parser.add_argument("--actor", help="Actor name or nconst ID")
-    parser.add_argument("--movie", help="Movie title or tconst ID")
+# ---------------------------------------------------------------------------
+# Main diagnostic
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Check actor-movie connection in Neo4j and TMDB")
+    parser.add_argument("--actor", help="Actor name")
+    parser.add_argument("--movie", help="Movie title")
     args = parser.parse_args()
 
-    actor_query = args.actor
-    movie_query = args.movie
-
-    if not actor_query:
-        actor_query = input("Enter actor name (e.g. Leonardo DiCaprio) or nconst: ").strip()
-    if not movie_query:
-        movie_query = input("Enter movie title (e.g. Inception) or tconst: ").strip()
-
-    if not actor_query or not movie_query:
-        print("Both actor and movie queries are required to run diagnostics.")
-        return
+    actor_query = args.actor or input("Actor name: ").strip()
+    movie_query = args.movie or input("Movie title: ").strip()
 
     print("\n" + "=" * 60)
-    print("=== Connactor Cast Diagnostic Tool ===")
+    print(f"  Checking: '{actor_query}' ↔ '{movie_query}'")
     print("=" * 60)
 
-    # 1. Load Processed Data
-    G, actor_index, movie_index = load_processed_data()
+    driver = _neo4j_driver()
 
-    # 2. Search Actor
-    actor_matches = []
-    # Search processed graph nodes
-    if G:
-        for node_id, data in G.nodes(data=True):
-            if data.get("type") == "actor":
-                if actor_query.lower() in data.get("name", "").lower() or actor_query == node_id:
-                    actor_matches.append({
-                        "id": node_id,
-                        "name": data.get("name"),
-                        "birth_year": data.get("birth_year"),
-                        "type": "processed"
-                    })
-    
-    # If not found or raw search requested, search raw
-    if not actor_matches or actor_query.startswith("nm"):
-        raw_actor_matches = find_actor_in_raw(actor_query)
-        # merge without duplicating IDs
-        seen_ids = {a["id"] for a in actor_matches}
-        for rm in raw_actor_matches:
-            if rm["id"] not in seen_ids:
-                actor_matches.append(rm)
-
-    selected_actor = select_item(actor_matches, actor_query, "actor")
-    if not selected_actor:
-        print(f"\n❌ ERROR: Could not find actor matching '{actor_query}' in processed or raw databases.")
-        return
-
-    # 3. Search Movie
-    movie_matches = []
-    # Search processed graph nodes
-    if G:
-        for node_id, data in G.nodes(data=True):
-            if data.get("type") == "movie":
-                if movie_query.lower() in data.get("title", "").lower() or movie_query == node_id:
-                    movie_matches.append({
-                        "id": node_id,
-                        "title": data.get("title"),
-                        "year": data.get("year"),
-                        "type": "processed"
-                    })
-    
-    # If not found or raw search requested, search raw
-    if not movie_matches or movie_query.startswith("tt"):
-        raw_movie_matches = find_movie_in_raw(movie_query)
-        # merge without duplicating IDs
-        seen_ids = {m["id"] for m in movie_matches}
-        for rm in raw_movie_matches:
-            if rm["id"] not in seen_ids:
-                movie_matches.append(rm)
-
-    selected_movie = select_item(movie_matches, movie_query, "movie")
-    if not selected_movie:
-        print(f"\n❌ ERROR: Could not find movie matching '{movie_query}' in processed or raw databases.")
-        return
-
-    # Diagnostics Run
-    nconst = selected_actor["id"]
-    tconst = selected_movie["id"]
-    actor_name = selected_actor.get("name") or selected_actor.get("label")
-    movie_title = selected_movie.get("title") or selected_movie.get("label")
-
-    print("\n" + "-" * 50)
-    print(f"DIAGNOSING: '{actor_name}' [{nconst}] ↔ '{movie_title}' [{tconst}]")
-    print("-" * 50)
-
-    # 4. Check Processed Graph Presence
-    in_graph = False
-    actor_in_graph = G is not None and nconst in G
-    movie_in_graph = G is not None and tconst in G
-    connected_in_graph = False
-
-    if G:
-        if actor_in_graph and movie_in_graph:
-            connected_in_graph = G.has_edge(nconst, tconst)
-
-    if connected_in_graph:
-        print(f"🟢 SUCCESS: The actor and movie are fully connected in the processed graph!")
-        print(f"  - Actor popularity rating: {G.nodes[nconst].get('popularity', 0.0)}")
-        print(f"  - Movie year: {G.nodes[tconst].get('year')}")
-        return
-
-    # If they are not connected, run detailed diagnostics
-    print("🔴 CONNECTION NOT FOUND in processed graph. Diagnosing why...")
-
-    # Diagnostic Step A: Check if the movie node is in the graph
-    print(f"\n[A] Check Movie Node '{movie_title}' [{tconst}]:")
-    if movie_in_graph:
-        print("  - Node is present in graph.pkl (Success)")
+    # ── Step 1: Find actor in Neo4j ─────────────────────────────────────────
+    print(f"\n[1] Searching Neo4j for actor '{actor_query}' ...")
+    actor_hits = neo4j_search_actors(driver, actor_query)
+    actor = _select(
+        actor_hits,
+        lambda a: f"{a['name']}  (person_id={a['id']}, popularity={a['popularity']:.1f}, rank={a['rank']})",
+        "actor",
+        actor_query,
+    )
+    actor_in_neo4j = actor is not None
+    if actor_in_neo4j:
+        print(f"  ✓ Found in Neo4j: {actor['name']} (person_id={actor['id']})")
     else:
-        print("  - Node is MISSING from graph.pkl")
-        raw_info = get_movie_raw_info(tconst)
-        if raw_info:
-            print("  - Checked raw title.basics.tsv.gz: Found movie in raw data!")
-            title_type = raw_info["title_type"]
-            print(f"    - Title Type: '{title_type}'")
-            if title_type != "movie":
-                print(f"    💡 ROOT CAUSE: Movie was EXCLUDED because its type is '{title_type}'.")
-                print("      Our ingestion only parses titles of type 'movie' to avoid bloating the game.")
-                return
-            else:
-                print("    - Movie type is 'movie' (qualifying). It must have been excluded due to other factors.")
+        print(f"  ✗ Not found in Neo4j (will check TMDB)")
+
+    # ── Step 2: Find movie in Neo4j ─────────────────────────────────────────
+    print(f"\n[2] Searching Neo4j for movie '{movie_query}' ...")
+    movie_hits = neo4j_search_movies(driver, movie_query)
+    movie = _select(
+        movie_hits,
+        lambda m: f"{m['title']} ({m['year']})  movie_id={m['id']}",
+        "movie",
+        movie_query,
+    )
+    movie_in_neo4j = movie is not None
+    if movie_in_neo4j:
+        print(f"  ✓ Found in Neo4j: {movie['title']} ({movie['year']})  movie_id={movie['id']}")
+    else:
+        print(f"  ✗ Not found in Neo4j (will check TMDB)")
+
+    # ── Step 3: Check edge ───────────────────────────────────────────────────
+    if actor_in_neo4j and movie_in_neo4j:
+        print(f"\n[3] Checking APPEARED_IN edge in Neo4j ...")
+        if neo4j_edge_exists(driver, actor["id"], movie["id"]):
+            print(f"  ✓ Edge EXISTS — {actor['name']} → {movie['title']} is in the graph.")
+            driver.close()
+            return
         else:
-            print("    💡 ROOT CAUSE: Movie is completely missing from raw title.basics.tsv.gz dataset.")
+            print(f"  ✗ No edge — both nodes exist but are NOT connected.")
+    else:
+        print(f"\n[3] Skipping edge check (one or both nodes missing from Neo4j)")
+
+    # ── Step 4: Cross-reference TMDB ────────────────────────────────────────
+    print(f"\n[4] Cross-referencing TMDB API ...")
+
+    # Resolve TMDB movie_id
+    tmdb_movie_id = movie["id"] if movie_in_neo4j else None
+    if tmdb_movie_id is None:
+        print(f"  Searching TMDB for movie '{movie_query}' ...")
+        tmdb_movies = tmdb_search_movie(movie_query)
+        tmdb_movie_match = _select(
+            tmdb_movies,
+            lambda m: f"{m['title']} ({m.get('release_date', '')[:4]})  id={m['id']}",
+            "movie",
+            movie_query,
+        )
+        if tmdb_movie_match:
+            tmdb_movie_id = tmdb_movie_match["id"]
+            print(f"  Found on TMDB: {tmdb_movie_match['title']}  id={tmdb_movie_id}")
+        else:
+            print(f"  ✗ Movie not found on TMDB either. Check the title spelling.")
+            driver.close()
             return
 
-    # Diagnostic Step B: Check if the actor node is in the graph
-    print(f"\n[B] Check Actor Node '{actor_name}' [{nconst}]:")
-    if actor_in_graph:
-        print("  - Node is present in graph.pkl (Success)")
-    else:
-        print("  - Node is MISSING from graph.pkl")
-        raw_info = get_actor_raw_info(nconst)
-        if raw_info:
-            print("  - Checked raw name.basics.tsv.gz: Found actor in raw data!")
-            print(f"    - Listed professions: '{raw_info['professions']}'")
-            
-            # Count the actor's raw qualifying credits
-            raw_credits = scan_raw_principals_for_actor(nconst)
-            
-            # Load title basics for quick verification (need to verify how many are 'movie' and valid)
-            print("    - Evaluating credit types:")
-            movie_credits_count = 0
-            actor_role_credits_count = 0
-            
-            for cred in raw_credits:
-                role = cred["category"]
-                # Only counts as actor/actress roles in movies
-                if role in VALID_CATEGORIES:
-                    actor_role_credits_count += 1
-            
-            print(f"      - Total raw credits found: {len(raw_credits)}")
-            print(f"      - Credits with actor/actress category: {actor_role_credits_count}")
-            
-            if actor_role_credits_count < MIN_CREDITS:
-                print(f"    💡 ROOT CAUSE: Actor was EXCLUDED because they have only {actor_role_credits_count} qualifying actor credits.")
-                print(f"      We require at least {MIN_CREDITS} actor/actress credits in movies. This actor is too obscure for the ingestion.")
-                return
-            else:
-                print(f"      - Actor has {actor_role_credits_count} qualifying credits (>= {MIN_CREDITS}). Missing for another reason.")
+    # Resolve TMDB person_id
+    tmdb_person_id = actor["id"] if actor_in_neo4j else None
+    if tmdb_person_id is None:
+        print(f"  Searching TMDB for actor '{actor_query}' ...")
+        tmdb_people = tmdb_search_person(actor_query)
+        tmdb_person_match = _select(
+            tmdb_people,
+            lambda p: f"{p['name']}  id={p['id']}  known_for_department={p.get('known_for_department')}",
+            "person",
+            actor_query,
+        )
+        if tmdb_person_match:
+            tmdb_person_id = tmdb_person_match["id"]
+            print(f"  Found on TMDB: {tmdb_person_match['name']}  id={tmdb_person_id}")
         else:
-            print("    💡 ROOT CAUSE: Actor is completely missing from raw name.basics.tsv.gz dataset.")
+            print(f"  ✗ Actor not found on TMDB either.")
+            driver.close()
             return
 
-    # Diagnostic Step C: Check the relationship in raw dataset
-    print(f"\n[C] Check Relationship in principals list:")
-    raw_rel = check_relationship_in_raw_principals(tconst, nconst)
-    if raw_rel:
-        category = raw_rel["category"]
-        print(f"  - Link exists in raw title.principals.tsv.gz with category: '{category}'")
-        if category not in VALID_CATEGORIES:
-            print(f"  💡 ROOT CAUSE: Connection was EXCLUDED because the actor's role category is '{category}'.")
-            print("    We only ingest cast links categorized as 'actor' or 'actress'.")
-            print("    Links such as 'self', 'writer', 'director', or 'producer' are skipped by design.")
-        else:
-            print("  - Category is qualifying. The actor or movie might have been removed during filtering.")
-    else:
-        print("  💡 ROOT CAUSE: Connection is completely missing from raw title.principals.tsv.gz database.")
-        print("    IMDB itself does not list this actor in the cast of this movie!")
+    # Fetch movie credits from TMDB
+    print(f"  Fetching TMDB credits for movie_id={tmdb_movie_id} ...")
+    cast = tmdb_movie_credits(tmdb_movie_id)
+    cast_by_id = {m["id"]: m for m in cast}
+    cast_member = cast_by_id.get(tmdb_person_id)
+
+    print(f"\n  TMDB cast size: {len(cast)}")
+
+    if not cast_member:
+        print(f"  ✗ {actor_query} is NOT in TMDB credits for this movie.")
+        print(f"    → TMDB itself doesn't list this actor in this film's cast.")
+        driver.close()
+        return
+
+    print(f"  ✓ {cast_member['name']} IS in TMDB credits:")
+    print(f"    known_for_department : {cast_member.get('known_for_department')}")
+    print(f"    character            : {cast_member.get('character')}")
+    print(f"    order                : {cast_member.get('order')}")
+
+    # ── Step 5: Explain why it's missing from our DB ─────────────────────────
+    print(f"\n[5] Diagnosing why the connection is missing from Neo4j ...")
+
+    dept = cast_member.get("known_for_department")
+    if dept != "Acting":
+        print(f"  ✗ ROOT CAUSE: known_for_department is '{dept}', not 'Acting'.")
+        print(f"    Our pipeline filters to Acting-department cast only.")
+        driver.close()
+        return
+
+    if not movie_in_neo4j:
+        print(f"  ✗ ROOT CAUSE: Movie is not in Neo4j — it was likely filtered out")
+        print(f"    at ingest time (vote_count or popularity threshold).")
+        driver.close()
+        return
+
+    if not actor_in_neo4j:
+        print(f"  ✗ ROOT CAUSE: Actor node is missing from Neo4j.")
+        print(f"    The actor appeared in TMDB credits with known_for_department='Acting',")
+        print(f"    but was excluded by the MIN_CREDITS={MIN_CREDITS} threshold in crawl_persons.py.")
+        print(f"    This actor doesn't appear in enough movies in our crawled set.")
+        driver.close()
+        return
+
+    # Both nodes exist, dept is Acting, but no edge → edge was dropped at load time
+    credit_count = neo4j_actor_credit_count(driver, actor["id"])
+    print(f"  Actor is in Neo4j with {credit_count} credits in our DB.")
+    print(f"  ✗ ROOT CAUSE: The APPEARED_IN edge is missing despite both nodes existing.")
+    print(f"    This means the edge was present in credits_crawl.jsonl but skipped")
+    print(f"    by load_neo4j.py — most likely because the actor had < {MIN_CREDITS} credits")
+    print(f"    at the time persons_crawl.jsonl was generated, so the Actor node")
+    print(f"    wasn't created, and the MATCH in load_neo4j dropped the edge silently.")
+    print(f"    Re-running the bootstrap (or adding a manual patch) will fix this.")
+
+    driver.close()
 
 
 if __name__ == "__main__":
