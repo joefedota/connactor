@@ -4,45 +4,36 @@ from app.main import _classify_difficulty
 pytestmark = pytest.mark.anyio
 
 
-# --- Unit Tests for _classify_difficulty ---
+# --- Unit Tests for _classify_difficulty (popularity-only) ---
 
 
 def test_classify_difficulty_easy():
-    # hops = 2, max_rank < 50 -> easy
-    assert _classify_difficulty(10, 20, 2) == "easy"
-    assert _classify_difficulty(49, 10, 2) == "easy"
+    assert _classify_difficulty(10, 20) == "easy"
+    assert _classify_difficulty(49, 10) == "easy"
 
 
 def test_classify_difficulty_medium():
-    # hops = 2, max_rank >= 50 but < 200 -> medium
-    assert _classify_difficulty(20, 100, 2) == "medium"
-    # hops = 4, max_rank < 200 -> medium
-    assert _classify_difficulty(10, 20, 4) == "medium"
-    assert _classify_difficulty(10, 199, 4) == "medium"
+    assert _classify_difficulty(20, 100) == "medium"
+    assert _classify_difficulty(50, 199) == "medium"
+    assert _classify_difficulty(199, 199) == "medium"
 
 
 def test_classify_difficulty_hard():
-    # hops = 2, max_rank >= 200 but < 1000 -> hard
-    assert _classify_difficulty(20, 500, 2) == "hard"
-    # hops = 4, max_rank >= 200 but < 1000 -> hard
-    assert _classify_difficulty(10, 500, 4) == "hard"
-    # hops = 6, max_rank < 1000 -> hard
-    assert _classify_difficulty(10, 20, 6) == "hard"
-    assert _classify_difficulty(999, 10, 6) == "hard"
+    assert _classify_difficulty(20, 500) == "hard"
+    assert _classify_difficulty(200, 999) == "hard"
+    assert _classify_difficulty(999, 0) == "hard"
 
 
 def test_classify_difficulty_expert():
-    # hops = 2, max_rank >= 1000 -> expert
-    assert _classify_difficulty(20, 1200, 2) == "expert"
-    # hops = 8, any rank -> expert
-    assert _classify_difficulty(10, 20, 8) == "expert"
+    assert _classify_difficulty(20, 1200) == "expert"
+    assert _classify_difficulty(1000, 1000) == "expert"
+    assert _classify_difficulty(5000, 5000) == "expert"
 
 
 # --- Integration Tests for /game Endpoint ---
 
 
 async def test_get_game_no_difficulty(client):
-    # Generating a game with no specific difficulty should pick a valid pair
     response = await client.get("/game")
     assert response.status_code == 200
     data = response.json()
@@ -53,23 +44,32 @@ async def test_get_game_no_difficulty(client):
 
 
 async def test_get_game_easy(client):
-    # Easy selection restricts actors to rank < 50
-    # Available mock actors: Alice (rank 10), Bob (rank 20).
+    # Alice (rank 10) + Bob (rank 20) — connected via TestFilm One
     response = await client.get("/game?difficulty=easy")
     assert response.status_code == 200
     data = response.json()
     assert data["difficulty"] == "easy"
-    assert "game_id" in data
-    assert data["source"]["label"] is not None
-    assert data["target"]["label"] is not None
 
 
 async def test_get_game_medium(client):
-    # Medium restricts rank < 200.
+    # Carol (rank 100) + Frank (rank 150) — connected via TestFilm Two
     response = await client.get("/game?difficulty=medium")
     assert response.status_code == 200
     data = response.json()
     assert data["difficulty"] == "medium"
-    assert "game_id" in data
-    assert data["source"]["label"] is not None
-    assert data["target"]["label"] is not None
+
+
+async def test_get_game_hard(client):
+    # Dave (rank 500) + Grace (rank 700) — connected via TestFilm Three
+    response = await client.get("/game?difficulty=hard")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["difficulty"] == "hard"
+
+
+async def test_get_game_expert(client):
+    # Eve (rank 2000) + Henry (rank 3000) — connected via TestFilm Five
+    response = await client.get("/game?difficulty=expert")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["difficulty"] == "expert"

@@ -43,26 +43,42 @@ async def neo4j_driver():
 @pytest.fixture(autouse=True)
 async def setup_test_data(neo4j_driver):
     # Setup test data with negative IDs
+    # Two actors per tier so the bucketed /game query can pick a pair from any difficulty.
     actors = [
-        {"person_id": -1, "name": "Alice", "popularity": 6.2, "rank": 10},
-        {"person_id": -2, "name": "Bob", "popularity": 5.1, "rank": 20},
-        {"person_id": -3, "name": "Carol", "popularity": 4.3, "rank": 100},
-        {"person_id": -4, "name": "Dave", "popularity": 3.5, "rank": 500},
-        {"person_id": -5, "name": "Eve", "popularity": 2.1, "rank": 2000},
+        # easy (rank < 50)
+        {"person_id": -1, "name": "Alice",  "popularity": 6.2, "rank": 10},
+        {"person_id": -2, "name": "Bob",    "popularity": 5.1, "rank": 20},
+        # medium (50 <= rank < 200)
+        {"person_id": -3, "name": "Carol",  "popularity": 4.3, "rank": 100},
+        {"person_id": -6, "name": "Frank",  "popularity": 4.0, "rank": 150},
+        # hard (200 <= rank < 1000)
+        {"person_id": -4, "name": "Dave",   "popularity": 3.5, "rank": 500},
+        {"person_id": -7, "name": "Grace",  "popularity": 3.0, "rank": 700},
+        # expert (1000 <= rank < 5000)
+        {"person_id": -5, "name": "Eve",    "popularity": 2.1, "rank": 2000},
+        {"person_id": -8, "name": "Henry",  "popularity": 1.5, "rank": 3000},
     ]
     movies = [
-        {"movie_id": -10, "title": "TestFilm One", "year": 2020, "vote_count": 1000},
-        {"movie_id": -20, "title": "TestFilm Two", "year": 2021, "vote_count": 500},
+        {"movie_id": -10, "title": "TestFilm One",   "year": 2020, "vote_count": 1000},
+        {"movie_id": -20, "title": "TestFilm Two",   "year": 2021, "vote_count": 500},
         {"movie_id": -30, "title": "TestFilm Three", "year": 2022, "vote_count": 200},
+        {"movie_id": -40, "title": "TestFilm Four",  "year": 2023, "vote_count": 100},
+        {"movie_id": -50, "title": "TestFilm Five",  "year": 2024, "vote_count": 50},
     ]
     edges = [
-        {"person_id": -1, "movie_id": -10},
-        {"person_id": -2, "movie_id": -10},
+        {"person_id": -1, "movie_id": -10},  # Alice (easy)
+        {"person_id": -2, "movie_id": -10},  # Bob (easy)   — easy pair connected
         {"person_id": -2, "movie_id": -20},
-        {"person_id": -3, "movie_id": -20},
+        {"person_id": -3, "movie_id": -20},  # Carol (medium)
+        {"person_id": -6, "movie_id": -20},  # Frank (medium) — medium pair connected via TestFilm Two
         {"person_id": -2, "movie_id": -30},
         {"person_id": -3, "movie_id": -30},
-        {"person_id": -4, "movie_id": -30},
+        {"person_id": -4, "movie_id": -30},  # Dave (hard)
+        {"person_id": -7, "movie_id": -30},  # Grace (hard)  — hard pair connected via TestFilm Three
+        {"person_id": -4, "movie_id": -40},
+        {"person_id": -5, "movie_id": -40},  # Eve (expert)
+        {"person_id": -8, "movie_id": -50},  # Henry (expert)
+        {"person_id": -5, "movie_id": -50},  # expert pair (Eve + Henry) connected via TestFilm Five
     ]
 
     async with neo4j_driver.session() as session:

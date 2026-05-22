@@ -31,29 +31,35 @@ from app.models import (
     ValidateResponse,
 )
 
-MAX_GAME_ATTEMPTS = 50
-MIN_HOPS = 2
-MAX_HOPS = 6
+MAX_GAME_ATTEMPTS = 20
+MAX_PATH_HOPS = 12
 
-# Rank pools per difficulty: actors are sorted by popularity (rank 0 = most famous)
-_DIFFICULTY_POOL: dict[Difficulty | None, int] = {
-    "easy": 50,
-    "medium": 200,
-    "hard": 1000,
-    None: 500,
+# Difficulty is determined by actor popularity rank only. Each tier is a half-open
+# interval of `actor.rank` (rank 0 = most famous). Both actors in a game pair are
+# picked from the same tier — keeps the experience focused (easy = "two A-listers",
+# expert = "two niche actors") and lets us pick the pair in one indexed query with
+# no retry-on-classification-mismatch loop.
+# TODO(fame-rank): rank is TMDB's global popularity — biases toward recently-trending
+# international actors. Switch to a fame_rank computed from movie vote_counts.
+_DIFFICULTY_RANK_RANGE: dict[Difficulty, tuple[int, int]] = {
+    "easy":   (0,    50),
+    "medium": (50,   200),
+    "hard":   (200,  1000),
+    "expert": (1000, 5000),
 }
+# Default (no difficulty filter) — anyone in the top 1000.
+_DEFAULT_RANK_RANGE = (0, 1000)
 
 
-def _classify_difficulty(rank_a: int, rank_b: int, hops: int) -> Difficulty:
+def _classify_difficulty(rank_a: int, rank_b: int) -> Difficulty:
     max_rank = max(rank_a, rank_b)
-    if hops == 2 and max_rank < 50:
+    if max_rank < 50:
         return "easy"
-    elif hops <= 4 and max_rank < 200:
+    if max_rank < 200:
         return "medium"
-    elif hops <= 6 and max_rank < 1000:
+    if max_rank < 1000:
         return "hard"
-    else:
-        return "expert"
+    return "expert"
 
 
 @asynccontextmanager
@@ -100,52 +106,49 @@ async def get_game(
     request: Request,
     difficulty: Optional[Difficulty] = Query(None),
 ):
-    pool_size = _DIFFICULTY_POOL[difficulty]
+    min_rank, max_rank = _DIFFICULTY_RANK_RANGE[difficulty] if difficulty else _DEFAULT_RANK_RANGE
     driver = request.app.state.neo4j
 
     async with driver.session() as session:
+        # Pick two random actors from the difficulty's rank tier in one indexed query,
+        # then verify a path exists between them (capped at 12 hops). Most popular pairs
+        # are 2-4 hops apart so this resolves in a single attempt; retry only if we
+        # happen to pick a disconnected pair.
         for _ in range(MAX_GAME_ATTEMPTS):
             result = await session.run(
-                """
-                MATCH (a:Actor) WHERE a.rank < $pool_size
+                f"""
+                MATCH (a:Actor) WHERE a.rank >= $min_rank AND a.rank < $max_rank
                 WITH a ORDER BY rand() LIMIT 2
-                WITH collect(a) AS actors
-                WHERE size(actors) = 2
+                WITH collect(a) AS actors WHERE size(actors) = 2
                 WITH actors[0] AS source, actors[1] AS target
-                MATCH p = shortestPath((source)-[:APPEARED_IN*..12]-(target))
-                WHERE length(p) >= $min_hops AND length(p) <= $max_hops
-                RETURN source, target, length(p) AS hops
+                MATCH p = shortestPath((source)-[:APPEARED_IN*..{MAX_PATH_HOPS}]-(target))
+                RETURN source, target
                 """,
-                pool_size=pool_size,
-                min_hops=MIN_HOPS,
-                max_hops=MAX_HOPS,
+                min_rank=min_rank,
+                max_rank=max_rank,
             )
             record = await result.single()
             if record is None:
                 continue
 
-            hops = record["hops"]
             source = record["source"]
             target = record["target"]
-            diff = _classify_difficulty(source["rank"], target["rank"], hops)
-
-            if difficulty is None or diff == difficulty:
-                return GameResponse(
-                    game_id=str(uuid.uuid4()),
-                    source=NodeInfo(
-                        type="actor",
-                        id=str(source["person_id"]),
-                        label=source["name"],
-                        popularity=source.get("popularity"),
-                    ),
-                    target=NodeInfo(
-                        type="actor",
-                        id=str(target["person_id"]),
-                        label=target["name"],
-                        popularity=target.get("popularity"),
-                    ),
-                    difficulty=diff,
-                )
+            return GameResponse(
+                game_id=str(uuid.uuid4()),
+                source=NodeInfo(
+                    type="actor",
+                    id=str(source["person_id"]),
+                    label=source["name"],
+                    popularity=source.get("popularity"),
+                ),
+                target=NodeInfo(
+                    type="actor",
+                    id=str(target["person_id"]),
+                    label=target["name"],
+                    popularity=target.get("popularity"),
+                ),
+                difficulty=_classify_difficulty(source["rank"], target["rank"]),
+            )
 
     raise HTTPException(status_code=503, detail="Could not find a valid pair. Try again.")
 
