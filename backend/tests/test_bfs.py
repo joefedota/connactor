@@ -1,227 +1,223 @@
-"""
-Unit tests for bfs.py using a hand-crafted 5-actor fixture graph.
-
-Graph topology:
-    nmA -- tt1 -- nmB -- tt2 -- nmC
-                   |             |
-                  tt3 ----------+
-                   |
-                  nmD
-
-nmE is isolated (no edges).
-
-Hop counts (edge count = number of steps in path):
-  nmA → nmB : 2  (nmA-tt1-nmB)
-  nmA → nmC : 4  (nmA-tt1-nmB-tt2-nmC  OR  nmA-tt1-nmB-tt3-nmC)
-  nmA → nmD : 4  (nmA-tt1-nmB-tt3-nmD)
-  nmA → nmE : None (disconnected)
-"""
-
-import sys
-from pathlib import Path
-
-import networkx as nx
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from app.bfs import (
-    bfs_shortest_path_length,
-    find_all_shortest_paths,
-    neighbors_of_type,
-    path_to_display,
-    validate_path,
-)
+pytestmark = pytest.mark.anyio
 
 
-@pytest.fixture
-def G():
-    graph = nx.Graph()
-    # Actor nodes
-    for nconst, name in [
-        ("nmA", "Alice"),
-        ("nmB", "Bob"),
-        ("nmC", "Carol"),
-        ("nmD", "Dave"),
-        ("nmE", "Eve"),
-    ]:
-        graph.add_node(nconst, type="actor", name=name, birth_year=None)
-    # Movie nodes
-    for tconst, title in [
-        ("tt1", "Film One"),
-        ("tt2", "Film Two"),
-        ("tt3", "Film Three"),
-    ]:
-        graph.add_node(tconst, type="movie", title=title)
-    # Edges
-    graph.add_edges_from([
-        ("nmA", "tt1"),
-        ("nmB", "tt1"),
-        ("nmB", "tt2"),
-        ("nmC", "tt2"),
-        ("nmB", "tt3"),
-        ("nmC", "tt3"),
-        ("nmD", "tt3"),
-    ])
-    return graph
+# --- Pathfinding & Solve Endpoint Tests ---
 
 
-# --- bfs_shortest_path_length ---
-
-def test_same_node(G):
-    assert bfs_shortest_path_length(G, "nmA", "nmA") == 0
-
-
-def test_direct_connection(G):
-    # nmA and nmB share tt1 → 2 hops
-    assert bfs_shortest_path_length(G, "nmA", "nmB") == 2
-
-
-def test_two_hop_actor(G):
-    # nmA → nmC: shortest is 4 hops (via nmB)
-    assert bfs_shortest_path_length(G, "nmA", "nmC") == 4
+async def test_same_node(client):
+    response = await client.post("/solve", json={"source_id": "-1", "target_id": "-1"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["hop_count"] == 0
+    assert len(data["paths"]) == 1
+    assert data["paths"][0][0]["id"] == "-1"
+    assert data["paths"][0][0]["label"] == "Alice"
 
 
-def test_disconnected(G):
-    assert bfs_shortest_path_length(G, "nmA", "nmE") is None
+async def test_direct_connection(client):
+    # Alice (-1) and Bob (-2) share Film One (-10) -> 2 hops
+    response = await client.post("/solve", json={"source_id": "-1", "target_id": "-2"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["hop_count"] == 2
+    assert len(data["paths"]) == 1
+    assert [node["id"] for node in data["paths"][0]] == ["-1", "-10", "-2"]
 
 
-def test_symmetric(G):
-    assert bfs_shortest_path_length(G, "nmB", "nmA") == 2
-    assert bfs_shortest_path_length(G, "nmC", "nmA") == 4
+async def test_two_hop_actor(client):
+    # Alice (-1) -> Carol (-3): shortest is 4 hops via Bob (-2)
+    response = await client.post("/solve", json={"source_id": "-1", "target_id": "-3"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["hop_count"] == 4
+    # Two paths are possible:
+    # 1. Alice -> Film One -> Bob -> Film Two -> Carol
+    # 2. Alice -> Film One -> Bob -> Film Three -> Carol
+    assert len(data["paths"]) == 2
+    for path in data["paths"]:
+        assert path[0]["id"] == "-1"
+        assert path[2]["id"] == "-2"
+        assert path[4]["id"] == "-3"
+        assert len(path) == 5
 
 
-# --- find_all_shortest_paths ---
-
-def test_direct_path_contents(G):
-    paths = find_all_shortest_paths(G, "nmA", "nmB")
-    assert len(paths) == 1
-    assert paths[0] == ["nmA", "tt1", "nmB"]
-
-
-def test_multiple_paths(G):
-    # nmA → nmC has 2 shortest paths: via tt2 and via tt3
-    paths = find_all_shortest_paths(G, "nmA", "nmC")
-    assert len(paths) == 2
-    for p in paths:
-        assert p[0] == "nmA"
-        assert p[-1] == "nmC"
-        assert len(p) == 5  # actor, movie, actor, movie, actor
-
-    movie_ids = {p[3] for p in paths}  # second movie in each path
-    assert movie_ids == {"tt2", "tt3"}
+async def test_disconnected(client):
+    # Alice (-1) and Eve (-5) are disconnected
+    response = await client.post("/solve", json={"source_id": "-1", "target_id": "-5"})
+    assert response.status_code == 404
+    assert "No path exists" in response.json()["detail"]
 
 
-def test_disconnected_returns_empty(G):
-    assert find_all_shortest_paths(G, "nmA", "nmE") == []
+async def test_symmetric(client):
+    response_ab = await client.post("/solve", json={"source_id": "-2", "target_id": "-1"})
+    response_ba = await client.post("/solve", json={"source_id": "-1", "target_id": "-2"})
+    assert response_ab.status_code == 200
+    assert response_ba.status_code == 200
+    assert response_ab.json()["hop_count"] == response_ba.json()["hop_count"]
 
 
-def test_same_node_returns_single_path(G):
-    paths = find_all_shortest_paths(G, "nmA", "nmA")
-    assert paths == [["nmA"]]
+# --- Path Validation Endpoint Tests ---
 
 
-def test_path_cap():
-    # Build a star: nmSRC shares 15 movies with nmTGT
-    star = nx.Graph()
-    star.add_node("nmSRC", type="actor", name="Source", birth_year=None)
-    star.add_node("nmTGT", type="actor", name="Target", birth_year=None)
-    for i in range(15):
-        tconst = f"tt{i}"
-        star.add_node(tconst, type="movie", title=f"Film {i}")
-        star.add_edge("nmSRC", tconst)
-        star.add_edge("nmTGT", tconst)
-
-    paths = find_all_shortest_paths(star, "nmSRC", "nmTGT", max_paths=10)
-    assert len(paths) == 10  # capped at 10 even though 15 exist
-
-
-def test_all_paths_are_optimal(G):
-    paths = find_all_shortest_paths(G, "nmA", "nmC")
-    lengths = {len(p) for p in paths}
-    assert len(lengths) == 1, "All returned paths should be the same (minimum) length"
+async def test_validate_valid_path(client):
+    body = {
+        "source_id": "-1",
+        "target_id": "-2",
+        "path": ["-1", "-10", "-2"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"]
+    assert data["is_complete"]
+    assert data["is_optimal"]
 
 
-# --- validate_path ---
-
-def test_validate_valid_path(G):
-    valid, msg = validate_path(G, ["nmA", "tt1", "nmB"], "nmA", "nmB")
-    assert valid
-    assert msg == ""
-
-
-def test_validate_valid_incomplete_path(G):
-    # Valid so far but doesn't reach target
-    valid, msg = validate_path(G, ["nmA", "tt1", "nmB"], "nmA", "nmC")
-    assert valid  # structurally valid, just not complete yet
-
-
-def test_validate_empty_path(G):
-    valid, msg = validate_path(G, [], "nmA", "nmB")
-    assert not valid
+async def test_validate_valid_incomplete_path(client):
+    # Valid so far, but doesn't reach target Carol (-3)
+    body = {
+        "source_id": "-1",
+        "target_id": "-3",
+        "path": ["-1", "-10", "-2"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"]
+    assert not data["is_complete"]
+    assert data["is_optimal"] is None
 
 
-def test_validate_too_short(G):
-    valid, msg = validate_path(G, ["nmA", "tt1"], "nmA", "nmB")
-    assert not valid
+async def test_validate_empty_path(client):
+    body = {
+        "source_id": "-1",
+        "target_id": "-2",
+        "path": [],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["valid"]
+    assert "empty" in data["error"].lower()
 
 
-def test_validate_even_length(G):
-    valid, msg = validate_path(G, ["nmA", "tt1", "nmB", "tt2"], "nmA", "nmC")
-    assert not valid
+async def test_validate_too_short(client):
+    body = {
+        "source_id": "-1",
+        "target_id": "-2",
+        "path": ["-1", "-10"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["valid"]
+    assert "at least 3 nodes" in data["error"].lower()
 
 
-def test_validate_nonexistent_edge(G):
-    # nmA and tt2 are not connected
-    valid, msg = validate_path(G, ["nmA", "tt2", "nmC"], "nmA", "nmC")
-    assert not valid
-    assert "did not appear" in msg
+async def test_validate_even_length(client):
+    body = {
+        "source_id": "-1",
+        "target_id": "-3",
+        "path": ["-1", "-10", "-2", "-20"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["valid"]
+    assert "must be odd" in data["error"].lower()
 
 
-def test_validate_wrong_start(G):
-    valid, msg = validate_path(G, ["nmB", "tt1", "nmA"], "nmA", "nmA")
-    assert not valid
-    assert "start" in msg.lower()
+async def test_validate_nonexistent_edge(client):
+    # Alice (-1) is not in Film Two (-20)
+    body = {
+        "source_id": "-1",
+        "target_id": "-3",
+        "path": ["-1", "-20", "-3"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["valid"]
+    assert "did not appear" in data["error"].lower()
 
 
-def test_validate_repeated_movie(G):
-    # Construct a path that reuses tt3
-    valid, msg = validate_path(
-        G,
-        ["nmB", "tt3", "nmC", "tt3", "nmD"],
-        "nmB",
-        "nmD",
-    )
-    assert not valid
-    assert "twice" in msg.lower()
+async def test_validate_wrong_start(client):
+    body = {
+        "source_id": "-1",
+        "target_id": "-2",
+        "path": ["-2", "-10", "-1"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["valid"]
+    assert "must start with source" in data["error"].lower()
 
 
-def test_validate_wrong_type_order(G):
-    # Start with a movie node (violates actor-first rule)
-    valid, msg = validate_path(G, ["tt1", "nmB", "tt2"], "tt1", "tt2")
-    assert not valid
+async def test_validate_repeated_movie(client):
+    # Valid layout, but reuses Film Three (-30)
+    body = {
+        "source_id": "-2",
+        "target_id": "-4",
+        "path": ["-2", "-30", "-3", "-30", "-4"],
+    }
+    response = await client.post("/validate", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["valid"]
+    assert "appears twice" in data["error"].lower()
 
 
-# --- neighbors_of_type ---
-
-def test_neighbors_of_actor(G):
-    # nmB's movie neighbors
-    movies = set(neighbors_of_type(G, "nmB", "movie"))
-    assert movies == {"tt1", "tt2", "tt3"}
+# --- Autocomplete Neighbors Endpoint Tests ---
 
 
-def test_neighbors_of_movie(G):
-    # tt3's actor neighbors
-    actors = set(neighbors_of_type(G, "tt3", "actor"))
-    assert actors == {"nmB", "nmC", "nmD"}
+async def test_neighbors_of_actor(client):
+    # Bob's movies
+    response = await client.get("/autocomplete/neighbors?node_id=-2&type=movie")
+    assert response.status_code == 200
+    data = response.json()
+    results = data["results"]
+    assert len(results) == 3
+    movie_ids = {node["id"] for node in results}
+    assert movie_ids == {"-10", "-20", "-30"}
+    # Verify descending vote count order
+    assert results[0]["id"] == "-10"  # 1000 votes
+    assert results[1]["id"] == "-20"  # 500 votes
+    assert results[2]["id"] == "-30"  # 200 votes
 
 
-# --- path_to_display ---
+async def test_neighbors_of_movie(client):
+    # Film Three's actors
+    response = await client.get("/autocomplete/neighbors?node_id=-30&type=actor")
+    assert response.status_code == 200
+    data = response.json()
+    results = data["results"]
+    assert len(results) == 3
+    actor_ids = {node["id"] for node in results}
+    assert actor_ids == {"-2", "-3", "-4"}
+    # Verify descending popularity order
+    assert results[0]["id"] == "-2"  # Bob (5.1)
+    assert results[1]["id"] == "-3"  # Carol (4.3)
+    assert results[2]["id"] == "-4"  # Dave (3.5)
 
-def test_path_to_display(G):
-    result = path_to_display(G, ["nmA", "tt1", "nmB"])
-    assert result == [
-        {"type": "actor", "id": "nmA", "label": "Alice"},
-        {"type": "movie", "id": "tt1", "label": "Film One", "year": None},
-        {"type": "actor", "id": "nmB", "label": "Bob"},
-    ]
+
+# --- Connected Endpoint Tests ---
+
+
+async def test_connected_valid(client):
+    response = await client.get("/connected?a=-1&b=-10")
+    assert response.status_code == 200
+    assert response.json()["connected"]
+
+    # Symmetric check
+    response_rev = await client.get("/connected?a=-10&b=-1")
+    assert response_rev.status_code == 200
+    assert response_rev.json()["connected"]
+
+
+async def test_connected_invalid(client):
+    response = await client.get("/connected?a=-1&b=-20")
+    assert response.status_code == 200
+    assert not response.json()["connected"]
