@@ -43,20 +43,22 @@ async def neo4j_driver():
 @pytest.fixture(autouse=True)
 async def setup_test_data(neo4j_driver):
     # Setup test data with negative IDs
-    # Two actors per tier so the bucketed /game query can pick a pair from any difficulty.
+    # Two actors per tier so the bucketed /game query can pick a pair from any
+    # difficulty. fame_rank mirrors rank in test data — prod computes fame_rank
+    # from movie vote_counts, but the tier semantics are identical.
     actors = [
-        # easy (rank < 50)
-        {"person_id": -1, "name": "Alice",  "popularity": 6.2, "rank": 10},
-        {"person_id": -2, "name": "Bob",    "popularity": 5.1, "rank": 20},
-        # medium (50 <= rank < 200)
-        {"person_id": -3, "name": "Carol",  "popularity": 4.3, "rank": 100},
-        {"person_id": -6, "name": "Frank",  "popularity": 4.0, "rank": 150},
-        # hard (200 <= rank < 1000)
-        {"person_id": -4, "name": "Dave",   "popularity": 3.5, "rank": 500},
-        {"person_id": -7, "name": "Grace",  "popularity": 3.0, "rank": 700},
-        # expert (1000 <= rank < 5000)
-        {"person_id": -5, "name": "Eve",    "popularity": 2.1, "rank": 2000},
-        {"person_id": -8, "name": "Henry",  "popularity": 1.5, "rank": 3000},
+        # easy (fame_rank < 50)
+        {"person_id": -1, "name": "Alice",  "popularity": 6.2, "rank": 10,   "fame_rank": 10},
+        {"person_id": -2, "name": "Bob",    "popularity": 5.1, "rank": 20,   "fame_rank": 20},
+        # medium (50 <= fame_rank < 200)
+        {"person_id": -3, "name": "Carol",  "popularity": 4.3, "rank": 100,  "fame_rank": 100},
+        {"person_id": -6, "name": "Frank",  "popularity": 4.0, "rank": 150,  "fame_rank": 150},
+        # hard (200 <= fame_rank < 1000)
+        {"person_id": -4, "name": "Dave",   "popularity": 3.5, "rank": 500,  "fame_rank": 500},
+        {"person_id": -7, "name": "Grace",  "popularity": 3.0, "rank": 700,  "fame_rank": 700},
+        # expert (1000 <= fame_rank < 5000)
+        {"person_id": -5, "name": "Eve",    "popularity": 2.1, "rank": 2000, "fame_rank": 2000},
+        {"person_id": -8, "name": "Henry",  "popularity": 1.5, "rank": 3000, "fame_rank": 3000},
     ]
     movies = [
         {"movie_id": -10, "title": "TestFilm One",   "year": 2020, "vote_count": 1000},
@@ -90,7 +92,13 @@ async def setup_test_data(neo4j_driver):
         await session.run(
             """
             UNWIND $actors AS actor
-            CREATE (a:Actor {person_id: actor.person_id, name: actor.name, popularity: actor.popularity, rank: actor.rank})
+            CREATE (a:Actor {
+                person_id: actor.person_id,
+                name: actor.name,
+                popularity: actor.popularity,
+                rank: actor.rank,
+                fame_rank: actor.fame_rank
+            })
             """,
             actors=actors,
         )
