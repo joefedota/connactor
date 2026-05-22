@@ -2,11 +2,13 @@ services:
   neo4j:
     image: neo4j:5-community
     restart: always
-    # 7687 is published on all host interfaces — the VPC firewall (allow-neo4j-from-cloudrun,
-    # tcp:7687 from 10.0.0.0/8) is what restricts access to Cloud Run only. 7474 (HTTP browser)
-    # is intentionally not published; tunnel via SSH for debugging.
+    # 7687 (Bolt) is published on all host interfaces — the VPC firewall
+    # (allow-neo4j-from-cloudrun, tcp:7687 from 10.0.0.0/8) restricts access to Cloud Run.
+    # 7474 (HTTP browser) is published on localhost only — reach it via SSH tunnel
+    # (see docs/ops/setup-vm.md "Browsing the graph").
     ports:
       - "7687:7687"
+      - "127.0.0.1:7474:7474"
     volumes:
       - /data/neo4j/data:/data
       - /data/neo4j/logs:/logs

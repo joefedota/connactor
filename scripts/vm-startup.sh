@@ -41,6 +41,7 @@ services:
     restart: always
     ports:
       - "7687:7687"
+      - "127.0.0.1:7474:7474"
     volumes:
       - /data/neo4j/data:/data
       - /data/neo4j/logs:/logs

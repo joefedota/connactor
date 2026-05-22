@@ -149,6 +149,26 @@ ok
 1
 ```
 
+## Browsing the graph (Neo4j Browser)
+
+The Neo4j Browser web UI listens on `127.0.0.1:7474` on the VM — not exposed to the VPC or the internet, only reachable via SSH tunnel.
+
+Open a tunnel:
+
+```bash
+gcloud compute ssh connactor-db --zone us-central1-a --project connactor-497019 \
+  -- -L 7474:localhost:7474 -L 7687:localhost:7687
+```
+
+Leave that terminal open, then visit [http://localhost:7474](http://localhost:7474). The driver needs Bolt too, hence the second `-L`; the browser uses Bolt under the hood for queries.
+
+Connect with:
+- URI: `bolt://localhost:7687`
+- Username: `neo4j`
+- Password: `gcloud secrets versions access latest --secret NEO4J_PASSWORD --project connactor-497019`
+
+Close the SSH session when you're done; the tunnel goes with it.
+
 ## Replicating the VM
 
 To recreate the VM from scratch (e.g. after deletion), re-run steps 1–6. Disk and snapshots survive VM deletion.
