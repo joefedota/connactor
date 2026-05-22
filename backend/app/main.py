@@ -225,6 +225,23 @@ async def post_validate(request: Request, body: ValidateRequest):
 async def post_solve(request: Request, body: SolveRequest):
     driver = request.app.state.neo4j
 
+    if body.source_id == body.target_id:
+        async with driver.session() as session:
+            result = await session.run(
+                "MATCH (a:Actor {person_id: $id}) RETURN a.name AS name, a.popularity AS popularity",
+                id=int(body.source_id),
+            )
+            record = await result.single()
+        if not record:
+            raise HTTPException(status_code=404, detail="Actor not found.")
+        node = NodeInfo(
+            type="actor",
+            id=body.source_id,
+            label=record["name"],
+            popularity=record.get("popularity"),
+        )
+        return SolveResponse(hop_count=0, paths=[[node]])
+
     async with driver.session() as session:
         result = await session.run(
             """
