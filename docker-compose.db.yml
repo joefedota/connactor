@@ -1,0 +1,15 @@
+services:
+  neo4j:
+    image: neo4j:5-community
+    restart: always
+    ports: []
+    expose: ["7474", "7687"]
+    volumes:
+      - /data/neo4j/data:/data
+      - /data/neo4j/logs:/logs
+      - /data/dumps:/dumps
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_dbms_memory_heap_initial__size=4g
+      - NEO4J_dbms_memory_heap_max__size=4g
+      - NEO4J_dbms_memory_pagecache_size=6g
