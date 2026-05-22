@@ -22,7 +22,7 @@ from neo4j.exceptions import ClientError
 from tqdm import tqdm
 
 import utils.gcs as gcs
-from utils.settings import settings
+from settings import settings
 
 logger = logging.getLogger(__name__)
 

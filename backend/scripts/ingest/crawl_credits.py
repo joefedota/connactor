@@ -24,7 +24,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from tqdm.asyncio import tqdm
 
 import utils.gcs as gcs
-from utils.settings import settings
+from settings import settings
 
 logger = logging.getLogger(__name__)
 

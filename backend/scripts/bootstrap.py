@@ -17,8 +17,10 @@ import tempfile
 import time
 from pathlib import Path
 
-# Ensure ingest and utils packages are importable when running as `uv run python scripts/bootstrap.py`
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Ensure ingest/utils packages (scripts/) and settings (backend/) are importable.
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPTS_DIR))
+sys.path.insert(0, str(_SCRIPTS_DIR.parent))
 
 import utils.gcs as gcs
 from ingest.crawl_credits import run as crawl_credits

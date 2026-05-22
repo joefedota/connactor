@@ -52,6 +52,6 @@ https://github.com/joefedota/connactor/projects
 
 When responding to GitHub PR review comments, reply in the format:
 ```
-[CLAUDE]: <response>
+[AGENT NAME]: <response>
 ```
-If making a code change in response to a comment, make the change and include it in the reply. If disagreeing with a suggestion, explain why in the reply without making a change.
+Substitute your own model/agent name (e.g. `[CLAUDE]`, `[GEMINI]`). If making a code change in response to a comment, make the change and include it in the reply. If disagreeing with a suggestion, explain why in the reply without making a change.

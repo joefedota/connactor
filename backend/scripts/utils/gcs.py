@@ -5,7 +5,7 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from utils.settings import settings
+from settings import settings
 
 logger = logging.getLogger(__name__)
 

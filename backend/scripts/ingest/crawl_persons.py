@@ -27,7 +27,7 @@ from tqdm.asyncio import tqdm
 
 import utils.gcs as gcs
 from ingest.crawl_credits import AsyncTokenBucket
-from utils.settings import settings
+from settings import settings
 
 logger = logging.getLogger(__name__)
 
