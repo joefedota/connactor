@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db import get_driver
 from app.models import (
     AutocompleteResponse,
+    Difficulty,
     GameResponse,
     NodeInfo,
     SolveRequest,
@@ -35,7 +36,7 @@ MIN_HOPS = 2
 MAX_HOPS = 6
 
 # Rank pools per difficulty: actors are sorted by popularity (rank 0 = most famous)
-_DIFFICULTY_POOL = {
+_DIFFICULTY_POOL: dict[Difficulty | None, int] = {
     "easy": 50,
     "medium": 200,
     "hard": 1000,
@@ -43,7 +44,7 @@ _DIFFICULTY_POOL = {
 }
 
 
-def _classify_difficulty(rank_a: int, rank_b: int, hops: int) -> str:
+def _classify_difficulty(rank_a: int, rank_b: int, hops: int) -> Difficulty:
     max_rank = max(rank_a, rank_b)
     if hops == 2 and max_rank < 50:
         return "easy"
@@ -97,7 +98,7 @@ def _movie_to_node(record, key: str = "m") -> NodeInfo:
 @app.get("/game", response_model=GameResponse)
 async def get_game(
     request: Request,
-    difficulty: Optional[str] = Query(None, pattern="^(easy|medium|hard|expert)$"),
+    difficulty: Optional[Difficulty] = Query(None),
 ):
     pool_size = _DIFFICULTY_POOL[difficulty]
     driver = request.app.state.neo4j

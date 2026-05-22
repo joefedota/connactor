@@ -25,9 +25,9 @@
 ## Phase 2 — API Overhaul
 **Goal:** All FastAPI endpoints backed by Neo4j. No NetworkX, no Trie, no pickle.
 
-- [ ] Replace `GraphStore` with Neo4j async driver
-- [ ] Replace Python BFS with Cypher `shortestPath` / `allShortestPaths`
-- [ ] Replace Trie autocomplete with Neo4j full-text indexes
+- [x] Replace `GraphStore` with Neo4j async driver
+- [x] Replace Python BFS with Cypher `shortestPath` / `allShortestPaths`
+- [x] Replace Trie autocomplete with Neo4j full-text indexes
 - [ ] Update `/game` to pop from Redis pair pool
 - [ ] Update all remaining endpoints to use Neo4j
 - [ ] All 25 existing tests passing against Neo4j

@@ -1,9 +1,11 @@
 """Pydantic models for all API request/response shapes."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
+
+Difficulty = Literal["easy", "medium", "hard", "expert"]
 
 
 class NodeInfo(BaseModel):
@@ -18,7 +20,7 @@ class GameResponse(BaseModel):
     game_id: str
     source: NodeInfo
     target: NodeInfo
-    difficulty: str
+    difficulty: Difficulty
 
 
 class ValidateRequest(BaseModel):

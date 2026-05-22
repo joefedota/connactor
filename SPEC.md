@@ -68,22 +68,24 @@ Bipartite graph: actor nodes + movie nodes, edges = actor appeared in movie.
 - Shortest path = BFS from source actor to target actor, alternating actor → movie → actor
 - All optimal paths: BFS backward from target (builds distance map), then DFS from source constrained to optimal edges only, capped at 10 paths
 - Pair generation: live BFS at `/game` request time, retries until 2–6 hop path found, sampled from eligible actor pool
-- Graph held in memory at server startup (~1–2 GB RAM)
+- Shortest path and all-paths queries run via Cypher (`shortestPath` / `allShortestPaths`) against Neo4j
+- Pair generation: Cypher random sample from rank-bounded actor pool + shortestPath filter, retries until valid pair found
+- Autocomplete: Neo4j full-text indexes (`actorNames`, `movieTitles`)
 
 ---
 
 ## Tech Stack
 
-| Layer | v1 (current) | Production (target) |
-|-------|-------------|-------------------|
-| Frontend | React 18 + TypeScript, Vite, Zustand, React Router | Unchanged — deployed to Cloudflare Pages |
-| Backend | Python + FastAPI, NetworkX bipartite graph in memory | FastAPI + Neo4j async driver (stateless, ~1s startup) |
-| Graph DB | NetworkX in-memory (~1–2 GB RAM, single process) | Neo4j Community Edition (persistent, multi-server capable) |
-| Data source | IMDB bulk TSV dumps (principals only, ~10–15 cast/film) | TMDB API (full cast, ~50–200/film) |
-| Autocomplete | In-memory Trie (custom implementation) | Neo4j full-text indexes (Lucene-backed) |
-| Caching | None | Redis (pair pool + solve results) |
-| Hosting | Local only | GCP Compute Engine + Cloudflare Pages |
-| Auth | None (v1) | None (v1) — JWT in v2 |
+| Layer | v1 (shipped) | Current (Phase 2) | Production (target) |
+|-------|-------------|-------------------|-------------------|
+| Frontend | React 18 + TypeScript, Vite, Zustand, React Router | Unchanged | Deployed to Cloudflare Pages |
+| Backend | Python + FastAPI, NetworkX bipartite graph in memory | FastAPI + Neo4j async driver (stateless, ~1s startup) | Unchanged |
+| Graph DB | NetworkX in-memory (~1–2 GB RAM, single process) | Neo4j Community Edition (local Docker) | Neo4j on GCP Compute Engine |
+| Data source | IMDB bulk TSV dumps (principals only, ~10–15 cast/film) | TMDB API (full cast, ~50–200/film) | Unchanged |
+| Autocomplete | In-memory Trie (custom implementation) | Neo4j full-text indexes (Lucene-backed) | Unchanged |
+| Caching | None | None (Redis pair pool in Phase 3) | Redis (pair pool + solve results) |
+| Hosting | Local only | Local only | GCP Compute Engine + Cloudflare Pages |
+| Auth | None (v1) | None (v1) | None (v1) — JWT in v2 |
 
 ---
 

@@ -48,6 +48,16 @@ https://github.com/joefedota/connactor/projects
 - **No imports in function scope** unless absolutely necessary (e.g. breaking a circular import). All imports go at the top of the file.
 - **No print statements** in library/pipeline code — use `logging.getLogger(__name__)` and log at the appropriate level. Configure logging in entry points (`main()` functions) only.
 
+## Documentation updates
+
+After every PR, review and update all project documentation as needed:
+- `SPEC.md` — product spec, API table, decision log
+- `SYSTEM_DESIGN.md` — architecture, data model, endpoint mapping, infrastructure
+- `ROADMAP.md` — tick completed items, add new issues discovered during implementation
+- `README.md` — setup instructions, project structure
+
+Update these files in the same PR as the code change, before opening the PR.
+
 ## Responding to PR comments
 
 When responding to GitHub PR review comments, reply in the format:
