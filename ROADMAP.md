@@ -16,10 +16,11 @@
 - [x] Add Neo4j to Docker Compose (local dev)
 - [x] Write TMDB movie ID export downloader
 - [x] Write async TMDB credits crawler (`/movie/{id}/credits`)
-- [ ] Write async TMDB person enricher (`/person/{id}`)
-- [ ] Write Neo4j bulk data loader (initial full load)
+- [x] Write async TMDB person enricher (`/person/{id}`) — issue #5
+- [x] Write Neo4j bulk data loader (initial full load) — issue #6
+- [x] One-command bootstrap pipeline (`bootstrap.py`) with GCS artifact storage
 - [ ] Write daily delta refresh job (`/movie/changes`)
-- [ ] Write hourly pair pool generator (pre-vetted pairs → Redis)
+- [ ] Write hourly pair pool generator (pre-vetted pairs → Redis) — issue #8
 
 ## Phase 2 — API Overhaul
 **Goal:** All FastAPI endpoints backed by Neo4j. No NetworkX, no Trie, no pickle.

@@ -2,75 +2,181 @@
 
 Connect two actors through shared movies in as few hops as possible.
 
-## Setup
+---
 
-### 1. Install backend dependencies
+## Prerequisites
+
+| Tool | Install |
+|------|---------|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Required for local Neo4j |
+| [uv](https://docs.astral.sh/uv/getting-started/installation/) | Python package manager |
+| [gcloud CLI](https://cloud.google.com/sdk/docs/install) | GCS access + ADC auth |
+| TMDB API key | Free at [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api) — get the **Read Access Token** |
+
+---
+
+## GCP Setup (one-time)
+
+All pipeline artifacts (crawled data, Neo4j dumps) live in GCS. You need a GCP project with billing enabled and a bucket.
+
+```bash
+# Authenticate
+gcloud auth application-default login
+
+# Create the GCS bucket (pick any region)
+gcloud storage buckets create gs://connactor-data \
+  --project=YOUR_PROJECT_ID \
+  --location=us-central1 \
+  --uniform-bucket-level-access
+```
+
+Set your project as default so you don't have to repeat it:
+```bash
+gcloud config set project YOUR_PROJECT_ID
+```
+
+---
+
+## Local Setup
+
+### 1. Clone and install dependencies
+
+```bash
+git clone https://github.com/joefedota/connactor.git
+cd connactor/backend
+uv sync
+```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `backend/.env` and fill in:
+
+```
+TMDB_API_READ_TOKEN=your_tmdb_read_access_token
+NEO4J_PASSWORD=connactorpassword   # or whatever you prefer
+GCS_BUCKET=connactor-data
+```
+
+`NEO4J_URI`, `NEO4J_USER` default to `bolt://localhost:7687` / `neo4j` and don't need to be changed for local dev.
+
+### 3. Start Neo4j
+
+```bash
+# From the repo root:
+docker compose up -d neo4j
+```
+
+Neo4j is available at:
+- **Bolt** (driver): `bolt://localhost:7687`
+- **Browser UI**: http://localhost:7474 (user: `neo4j`, password: whatever you set in `.env`)
+
+### 4. Bootstrap the graph
+
+Run the dev bootstrap — downloads the TMDB movie export, crawls the top 1,000 movies, enriches actor metadata, and loads everything into Neo4j. Takes ~15 minutes.
 
 ```bash
 cd backend
-pip install -r requirements.txt
+uv run python scripts/bootstrap.py --mode dev
 ```
 
-### 2. Download IMDB data + build graph (~10 min, ~1 GB download)
+Each step is idempotent. If it fails mid-run, re-run the same command and it resumes from the GCS checkpoint. To skip steps you've already completed:
+
+```bash
+uv run python scripts/bootstrap.py --mode dev --skip-download --skip-credits --skip-persons
+```
+
+For the full production dataset (~35k movies, ~4–6 hours):
+```bash
+uv run python scripts/bootstrap.py --mode prod
+```
+
+### 5. Verify the graph
+
+```bash
+docker exec connactor-neo4j-dev cypher-shell -u neo4j -p connactorpassword \
+  "MATCH (a:Actor) RETURN count(a) AS actors;
+   MATCH (m:Movie) RETURN count(m) AS movies;
+   MATCH ()-[r:APPEARED_IN]->() RETURN count(r) AS edges;"
+```
+
+Spot-check a path:
+```bash
+docker exec connactor-neo4j-dev cypher-shell -u neo4j -p connactorpassword \
+  "MATCH p = shortestPath((a1:Actor)-[:APPEARED_IN*..12]-(a2:Actor))
+   WHERE a1.rank < 10 AND a2.rank < 10 AND a1 <> a2
+   RETURN [n IN nodes(p) | coalesce(n.name, n.title)] AS path LIMIT 3;"
+```
+
+### 6. Publish a dev seed (optional)
+
+Once the graph is loaded, dump it to GCS so other developers can skip the bootstrap entirely:
+
+```bash
+./scripts/dump-neo4j.sh dev
+```
+
+Other developers can then restore in seconds instead of re-crawling:
+
+```bash
+./scripts/setup-local-neo4j.sh dev
+```
+
+---
+
+## Running the App
+
+> **Note:** The FastAPI backend and React frontend are not yet connected to Neo4j (Phase 2). The current API still reads from the legacy IMDB/NetworkX graph. Instructions will be updated once Phase 2 is complete.
+
+---
+
+## Running Tests
 
 ```bash
 cd backend
-python scripts/ingest.py
+uv run pytest
 ```
 
-This downloads three IMDB bulk TSV files and writes:
-- `data/processed/graph.pkl` — NetworkX bipartite graph (~1–2 GB RAM)
-- `data/processed/actor_index.json`
-- `data/processed/movie_index.json`
+---
 
-### 3. Pre-generate puzzle pairs
+## Project Structure
 
-```bash
-python scripts/generate_pairs.py
+```
+connactor/
+  backend/
+    app/              # FastAPI application (Phase 2: will connect to Neo4j)
+    scripts/
+      bootstrap.py    # One-command pipeline orchestrator
+      ingest/         # TMDB crawlers + Neo4j loader
+      utils/          # Shared GCS helpers
+    settings.py       # Pydantic settings (reads from .env)
+    tests/
+  frontend/           # React + TypeScript + Vite
+  migrations/
+    schema.cql        # Neo4j constraints + full-text indexes
+  scripts/
+    dump-neo4j.sh     # Dump local Neo4j → GCS
+    setup-local-neo4j.sh  # Restore from GCS dump (or bootstrap from scratch)
+  docker-compose.yml  # Local Neo4j
 ```
 
-Writes `data/processed/pairs.json` (1000 actor pairs, paths 2–6 hops).
-
-### 4. Start the API server
-
-```bash
-cd backend
-uvicorn app.main:app --reload
-```
-
-Server starts at `http://localhost:8000`. First load takes ~15–30 seconds while the graph deserializes.
-
-### 5. Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend at `http://localhost:5173`. API calls proxied to `localhost:8000` via Vite.
-
-## Run tests
-
-```bash
-cd backend
-python -m pytest tests/ -v
-```
-
-## API reference
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /game` | Random actor pair |
-| `POST /validate` | Validate path `{source_nconst, target_nconst, path: [id, ...]}` |
-| `POST /solve` | All optimal paths `{source_nconst, target_nconst}` |
-| `GET /autocomplete?q=...&type=actor\|movie` | Prefix search |
-| `GET /autocomplete/neighbors?node_id=...&type=actor\|movie` | Constrained neighbor search |
-| `GET /health` | Graph stats |
+---
 
 ## Architecture
 
-- **Graph**: NetworkX bipartite graph loaded in-memory. Actor nodes (`nm...`) ↔ Movie nodes (`tt...`). Edges = appeared in.
-- **BFS**: Finds shortest path length + enumerates all optimal paths (DFS with backward-BFS pruning, capped at 10).
-- **Autocomplete**: Two tries (actors + movies) with diacritic normalization. Word-level indexing lets users type last names.
-- **Chain UX**: Search alternates actor/movie by path position parity. Neighbor-constrained search means only valid moves are shown.
+See [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) for the full production architecture.
+
+**Short version:**
+
+```
+TMDB API → async crawler → GCS (JSONL) → Neo4j loader → Neo4j
+                                                           ↓
+                                               FastAPI (Cloud Run)
+                                                           ↓
+                                            React (Cloudflare Pages)
+```
+
+Graph model: `(:Actor)-[:APPEARED_IN]->(:Movie)`. Shortest path via Cypher `shortestPath()`. Full-text indexes for autocomplete.

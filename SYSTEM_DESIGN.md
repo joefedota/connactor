@@ -35,7 +35,7 @@ TMDB API
 2. Filter to `vote_count > 50` and `popularity > 1.0` (~150–200k qualifying movies)
 3. Async crawl `/movie/{id}/credits` at ~40 req/s for all qualifying movies
 4. Async crawl `/person/{id}` for all unique person IDs
-5. Bulk load into Neo4j via `neo4j-admin database import` (fastest path for initial load)
+5. Bulk load into Neo4j via Python neo4j driver using `MERGE` in batches (idempotent; re-runnable)
 
 ### Daily Delta Refresh (cron, 9 AM UTC)
 
@@ -209,7 +209,7 @@ Serve TMDB image URLs directly from the frontend in the first iteration. Proxy t
 | Persistent disk (100 GB SSD) | Attached to Neo4j VM | ~$17/mo |
 | Static IP | GCP reserved | ~$7/mo |
 | Redis | Same VM via Docker Compose | $0 |
-| FastAPI | Same VM or Cloud Run | ~$0–10/mo |
+| FastAPI | Cloud Run (stateless, VPC Direct Egress → VM) | ~$0–10/mo |
 | React frontend | Cloudflare Pages | Free |
 | **Total** | | **~$75/mo** |
 
@@ -217,7 +217,7 @@ Neo4j software is free (Community Edition). No AuraDB — AuraDB Professional co
 
 ### Docker Compose
 
-All services run on the GCP VM via Docker Compose. Neo4j and Redis are internal-only (no external ports). Nginx handles TLS termination and reverse proxy.
+Neo4j and Redis run on the GCP VM via Docker Compose, internal-only (no external ports). FastAPI runs on Cloud Run and connects to the VM via VPC Direct Egress — no Nginx needed on the VM.
 
 ### Data Safety
 
@@ -225,7 +225,7 @@ GCP Persistent Disk is a separate resource from the VM — it survives VM deleti
 
 ### CI/CD
 
-GitHub Actions: run tests → build API container → SSH to VM → `docker compose up -d api`. Frontend: Cloudflare Pages watches `main` and deploys automatically.
+GitHub Actions: run tests → build API container → push to Artifact Registry → deploy to Cloud Run. Frontend: Cloudflare Pages watches `main` and deploys automatically. Neo4j on the VM is not touched by CI/CD — updated separately via the bootstrap pipeline.
 
 ---
 
