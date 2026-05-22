@@ -11,19 +11,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-# Ensure ingest package is importable when running as `uv run python scripts/bootstrap.py`
+# Ensure ingest and utils packages are importable when running as `uv run python scripts/bootstrap.py`
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ingest import gcs
+import utils.gcs as gcs
 from ingest.crawl_credits import run as crawl_credits
 from ingest.crawl_persons import run as crawl_persons
 from ingest.download_movie_ids import run as download_ids
 from ingest.load_neo4j import run as load_neo4j
+
+logger = logging.getLogger(__name__)
 
 DEV_BLOB = "pipeline/movie_ids_dev.json"
 PROD_BLOB = "pipeline/movie_ids_to_crawl.json"
@@ -31,9 +34,8 @@ DEV_SAMPLE_SIZE = 1000
 
 
 def _build_dev_blob() -> None:
-    """Slice top 1000 movies from full list and upload as dev seed."""
     if gcs.blob_exists(DEV_BLOB):
-        print(f"  [{DEV_BLOB}] already exists in GCS — skipping dev slice.")
+        logger.info("[%s] already exists in GCS — skipping dev slice.", DEV_BLOB)
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -49,42 +51,34 @@ def _build_dev_blob() -> None:
         with open(dev_path, "w") as f:
             json.dump(dev_movies, f)
 
-        print(f"  Uploading dev seed ({len(dev_movies)} movies) to GCS: {DEV_BLOB}")
+        logger.info("Uploading dev seed (%d movies) to GCS: %s", len(dev_movies), DEV_BLOB)
         gcs.upload_from_file(dev_path, DEV_BLOB)
 
 
 def _step(name: str, fn) -> None:
-    print(f"\n{'='*60}")
-    print(f"  STEP: {name}")
-    print(f"{'='*60}")
+    logger.info("=" * 60)
+    logger.info("STEP: %s", name)
+    logger.info("=" * 60)
     t0 = time.monotonic()
     fn()
-    elapsed = time.monotonic() - t0
-    print(f"  [{name}] done in {elapsed:.1f}s")
+    logger.info("[%s] done in %.1fs", name, time.monotonic() - t0)
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
     parser = argparse.ArgumentParser(description="Bootstrap local Neo4j from TMDB data via GCS.")
-    parser.add_argument(
-        "--mode",
-        choices=["dev", "prod"],
-        default="dev",
-        help="dev: top 1000 movies (~15 min). prod: full ~35k movies (~4-6 hrs).",
-    )
-    parser.add_argument("--skip-download", action="store_true", help="Skip TMDB export download step.")
-    parser.add_argument("--skip-credits", action="store_true", help="Skip movie credits crawl step.")
-    parser.add_argument("--skip-persons", action="store_true", help="Skip person enrichment step.")
+    parser.add_argument("--mode", choices=["dev", "prod"], default="dev")
+    parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--skip-credits", action="store_true")
+    parser.add_argument("--skip-persons", action="store_true")
     args = parser.parse_args()
 
-    print(f"=== Connactor Bootstrap (mode={args.mode}) ===")
-
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    logger.info("=== Connactor Bootstrap (mode=%s) ===", args.mode)
 
     if not args.skip_download:
         _step("Download movie IDs", download_ids)
 
-    movies_blob: str
     if args.mode == "dev":
         _step("Build dev seed (top 1000)", _build_dev_blob)
         movies_blob = DEV_BLOB
@@ -99,10 +93,7 @@ def main() -> None:
 
     _step("Load Neo4j", lambda: load_neo4j(movies_blob=movies_blob))
 
-    print(f"\n=== Bootstrap complete ({args.mode} mode) ===")
-    print("  Run verification queries:")
-    print("    docker exec connactor-neo4j-dev cypher-shell -u neo4j -p connactorpassword \\")
-    print('      "MATCH (a:Actor) RETURN count(a) AS actors;"')
+    logger.info("=== Bootstrap complete (%s mode) ===", args.mode)
 
 
 if __name__ == "__main__":

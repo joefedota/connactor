@@ -42,3 +42,16 @@ https://github.com/joefedota/connactor
 
 ## Project board
 https://github.com/joefedota/connactor/projects
+
+## Code style rules
+
+- **No imports in function scope** unless absolutely necessary (e.g. breaking a circular import). All imports go at the top of the file.
+- **No print statements** in library/pipeline code — use `logging.getLogger(__name__)` and log at the appropriate level. Configure logging in entry points (`main()` functions) only.
+
+## Responding to PR comments
+
+When responding to GitHub PR review comments, reply in the format:
+```
+[CLAUDE]: <response>
+```
+If making a code change in response to a comment, make the change and include it in the reply. If disagreeing with a suggestion, explain why in the reply without making a change.

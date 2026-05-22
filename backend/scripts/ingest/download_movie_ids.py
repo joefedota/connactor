@@ -14,33 +14,36 @@ import argparse
 import datetime
 import gzip
 import json
+import logging
 import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-from ingest import gcs
+import utils.gcs as gcs
+
+logger = logging.getLogger(__name__)
 
 BLOB_NAME = "pipeline/movie_ids_to_crawl.json"
 
 
 def _download_file(url: str, dest_path: Path) -> bool:
-    print(f"  Downloading from: {url}")
+    logger.info("Downloading from: %s", url)
     try:
         urllib.request.urlretrieve(url, dest_path)
         return True
     except urllib.error.HTTPError as e:
-        print(f"  HTTP Error: {e.code} - {e.reason}")
+        logger.warning("HTTP Error: %d - %s", e.code, e.reason)
         return False
-    except Exception as e:
-        print(f"  Download error: {e}")
+    except Exception:
+        logger.exception("Download error")
         return False
 
 
 def _parse_and_filter_export(source_path: Path) -> list[dict]:
     filtered_movies = []
     total_count = 0
-    print("  Parsing and filtering export ...")
+    logger.info("Parsing and filtering export ...")
     with gzip.open(source_path, "rt", encoding="utf-8") as f:
         for line in f:
             total_count += 1
@@ -55,16 +58,15 @@ def _parse_and_filter_export(source_path: Path) -> list[dict]:
             except (json.JSONDecodeError, KeyError):
                 continue
     filtered_movies.sort(key=lambda x: x["popularity"], reverse=True)
-    print(f"  Processed {total_count:,} total rows.")
-    print(f"  Filtered to {len(filtered_movies):,} qualifying movies (popularity > 1.0).")
+    logger.info("Processed %d total rows. Filtered to %d qualifying movies.", total_count, len(filtered_movies))
     return filtered_movies
 
 
 def run(force: bool = False) -> None:
-    print("=== TMDb Movie ID Downloader ===")
+    logger.info("=== TMDb Movie ID Downloader ===")
 
     if not force and gcs.blob_exists(BLOB_NAME):
-        print(f"  [{BLOB_NAME}] already exists in GCS — skipping (use --force to re-download).")
+        logger.info("[%s] already exists in GCS — skipping (use --force to re-download).", BLOB_NAME)
         return
 
     today = datetime.datetime.utcnow()
@@ -79,11 +81,10 @@ def run(force: bool = False) -> None:
 
         for date_str in dates_to_try:
             url = f"https://files.tmdb.org/p/exports/movie_ids_{date_str}.json.gz"
-            print(f"  Trying export for date: {date_str} ...")
+            logger.info("Trying export for date: %s ...", date_str)
             if _download_file(url, gz_path):
                 success = True
                 break
-            print(f"  Export for {date_str} unavailable, trying fallback...")
 
         if not success:
             raise RuntimeError("Could not download any TMDb daily movie export files.")
@@ -94,14 +95,14 @@ def run(force: bool = False) -> None:
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(movies, f)
 
-        print(f"  Uploading to GCS: {BLOB_NAME}")
         gcs.upload_from_file(out_path, BLOB_NAME)
-        print(f"  Done — {len(movies):,} movies uploaded.")
+        logger.info("Done — %d movies uploaded.", len(movies))
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description="Download and filter TMDb movie ID export to GCS.")
-    parser.add_argument("--force", action="store_true", help="Re-download even if GCS blob already exists.")
+    parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     run(force=args.force)
 

@@ -12,13 +12,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
+import logging
 import tempfile
 from pathlib import Path
 
+import jsonlines
 from neo4j import AsyncGraphDatabase
+from neo4j.exceptions import ClientError
+from tqdm import tqdm
 
-from ingest import gcs
+import utils.gcs as gcs
+from utils.settings import settings
+
+logger = logging.getLogger(__name__)
 
 PERSONS_BLOB = "pipeline/persons_crawl.jsonl"
 CREDITS_BLOB = "pipeline/credits_crawl.jsonl"
@@ -29,91 +35,75 @@ ACTOR_BATCH = 1000
 MOVIE_BATCH = 1000
 EDGE_BATCH = 5000
 
+_SCHEMA_ALREADY_EXISTS_CODES = {
+    "Neo.ClientError.Schema.EquivalentSchemaRuleAlreadyExists",
+    "Neo.ClientError.Schema.ConstraintAlreadyExists",
+    "Neo.ClientError.Schema.IndexAlreadyExists",
+}
+
 
 def _get_neo4j_driver():
-    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
-    user = os.environ.get("NEO4J_USER", "neo4j")
-    password = os.environ.get("NEO4J_PASSWORD", "connactorpassword")
-    return AsyncGraphDatabase.driver(uri, auth=(user, password))
+    return AsyncGraphDatabase.driver(
+        settings.neo4j_uri,
+        auth=(settings.neo4j_user, settings.neo4j_password),
+    )
 
 
 def _load_jsonl(path: Path) -> list[dict]:
-    rows = []
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                rows.append(json.loads(line))
-    return rows
+    with jsonlines.open(path) as reader:
+        return list(reader)
 
 
 async def _apply_schema(session) -> None:
-    print("  Applying schema ...")
+    logger.info("Applying schema ...")
     statements = [s.strip() for s in SCHEMA_PATH.read_text().split(";") if s.strip()]
     for stmt in statements:
         try:
             await session.run(stmt)
-        except Exception as e:
-            if "EquivalentSchemaRuleAlreadyExists" not in str(e) and "already exists" not in str(e).lower():
+        except ClientError as e:
+            if e.code not in _SCHEMA_ALREADY_EXISTS_CODES:
                 raise
 
 
 async def _load_actors(session, persons: list[dict]) -> None:
-    print(f"  Loading {len(persons):,} Actor nodes ...")
+    logger.info("Loading %d Actor nodes ...", len(persons))
     persons_sorted = sorted(persons, key=lambda p: p.get("popularity", 0.0), reverse=True)
-    rows = [
-        {**p, "rank": i}
-        for i, p in enumerate(persons_sorted)
-    ]
-    for i in range(0, len(rows), ACTOR_BATCH):
-        batch = rows[i : i + ACTOR_BATCH]
+    rows = [{**p, "rank": i} for i, p in enumerate(persons_sorted)]
+    for i in tqdm(range(0, len(rows), ACTOR_BATCH), desc="Actor nodes", unit="batch"):
         await session.run(
             """
             UNWIND $rows AS row
             MERGE (a:Actor {person_id: row.person_id})
-            SET a.name = row.name,
-                a.popularity = row.popularity,
-                a.rank = row.rank,
-                a.profile_path = row.profile_path,
+            SET a.name = row.name, a.popularity = row.popularity,
+                a.rank = row.rank, a.profile_path = row.profile_path,
                 a.birth_year = row.birth_year
             """,
-            rows=batch,
+            rows=rows[i : i + ACTOR_BATCH],
         )
-    print(f"    Actors loaded.")
 
 
 async def _load_movies(session, movies: list[dict]) -> None:
-    print(f"  Loading {len(movies):,} Movie nodes ...")
+    logger.info("Loading %d Movie nodes ...", len(movies))
     rows = [
-        {
-            "movie_id": m["id"],
-            "title": m["title"],
-            "popularity": m.get("popularity"),
-            "year": m.get("year"),
-            "vote_count": m.get("vote_count"),
-        }
+        {"movie_id": m["id"], "title": m["title"], "popularity": m.get("popularity"),
+         "year": m.get("year"), "vote_count": m.get("vote_count")}
         for m in movies
     ]
-    for i in range(0, len(rows), MOVIE_BATCH):
-        batch = rows[i : i + MOVIE_BATCH]
+    for i in tqdm(range(0, len(rows), MOVIE_BATCH), desc="Movie nodes", unit="batch"):
         await session.run(
             """
             UNWIND $rows AS row
             MERGE (m:Movie {movie_id: row.movie_id})
-            SET m.title = row.title,
-                m.popularity = row.popularity,
-                m.year = row.year,
-                m.vote_count = row.vote_count
+            SET m.title = row.title, m.popularity = row.popularity,
+                m.year = row.year, m.vote_count = row.vote_count
             """,
-            rows=batch,
+            rows=rows[i : i + MOVIE_BATCH],
         )
-    print(f"    Movies loaded.")
 
 
 async def _load_edges(session, credits: list[dict]) -> None:
-    print(f"  Loading {len(credits):,} APPEARED_IN edges ...")
-    for i in range(0, len(credits), EDGE_BATCH):
-        batch = credits[i : i + EDGE_BATCH]
+    logger.info("Loading %d APPEARED_IN edges ...", len(credits))
+    for i in tqdm(range(0, len(credits), EDGE_BATCH), desc="APPEARED_IN edges", unit="batch"):
         await session.run(
             """
             UNWIND $rows AS row
@@ -122,11 +112,8 @@ async def _load_edges(session, credits: list[dict]) -> None:
             MERGE (a)-[r:APPEARED_IN]->(m)
             SET r.character = row.character, r.order = row.order
             """,
-            rows=batch,
+            rows=credits[i : i + EDGE_BATCH],
         )
-        print(f"    Edges: {min(i + EDGE_BATCH, len(credits)):,}/{len(credits):,}", end="\r")
-    print()
-    print(f"    Edges loaded.")
 
 
 async def _log_counts(session) -> None:
@@ -137,18 +124,17 @@ async def _log_counts(session) -> None:
     ]:
         result = await session.run(query)
         record = await result.single()
-        print(f"  {label}: {record['n']:,}")
+        logger.info("%s: %d", label, record["n"])
 
 
 async def _load_async(movies_blob: str) -> None:
     driver = _get_neo4j_driver()
     try:
         await driver.verify_connectivity()
-        print("  Neo4j connection OK.")
+        logger.info("Neo4j connection OK.")
     except Exception as e:
         raise RuntimeError(
-            f"Cannot connect to Neo4j. Is it running? Error: {e}\n"
-            f"  URI: {os.environ.get('NEO4J_URI', 'bolt://localhost:7687')}"
+            f"Cannot connect to Neo4j at {settings.neo4j_uri}. Is it running? Error: {e}"
         ) from e
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -157,17 +143,10 @@ async def _load_async(movies_blob: str) -> None:
         credits_path = tmpdir_path / "credits_crawl.jsonl"
         movies_path = tmpdir_path / "movies.json"
 
-        print(f"  Downloading persons from GCS: {PERSONS_BLOB}")
-        if not gcs.download_to_file(PERSONS_BLOB, persons_path):
-            raise RuntimeError(f"GCS blob not found: {PERSONS_BLOB}. Run crawl_persons first.")
-
-        print(f"  Downloading credits from GCS: {CREDITS_BLOB}")
-        if not gcs.download_to_file(CREDITS_BLOB, credits_path):
-            raise RuntimeError(f"GCS blob not found: {CREDITS_BLOB}. Run crawl_credits first.")
-
-        print(f"  Downloading movies from GCS: {movies_blob}")
-        if not gcs.download_to_file(movies_blob, movies_path):
-            raise RuntimeError(f"GCS blob not found: {movies_blob}. Run download_movie_ids first.")
+        for blob, path in [(PERSONS_BLOB, persons_path), (CREDITS_BLOB, credits_path), (movies_blob, movies_path)]:
+            logger.info("Downloading from GCS: %s", blob)
+            if not gcs.download_to_file(blob, path):
+                raise RuntimeError(f"GCS blob not found: {blob}")
 
         persons = _load_jsonl(persons_path)
         credits = _load_jsonl(credits_path)
@@ -179,27 +158,22 @@ async def _load_async(movies_blob: str) -> None:
             await _load_actors(session, persons)
             await _load_movies(session, movies)
             await _load_edges(session, credits)
-            print("\n  Final counts:")
+            logger.info("Final counts:")
             await _log_counts(session)
 
     await driver.close()
 
 
 def run(movies_blob: str) -> None:
-    print("=== Neo4j Bulk Loader ===")
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
+    logger.info("=== Neo4j Bulk Loader ===")
     asyncio.run(_load_async(movies_blob))
-    print("  Load complete.")
+    logger.info("Load complete.")
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description="Load crawled data into Neo4j.")
-    parser.add_argument(
-        "--movies-blob",
-        default="pipeline/movie_ids_to_crawl.json",
-        help="GCS blob name for the movies list.",
-    )
+    parser.add_argument("--movies-blob", default="pipeline/movie_ids_to_crawl.json")
     args = parser.parse_args()
     run(movies_blob=args.movies_blob)
 
