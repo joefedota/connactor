@@ -1,5 +1,9 @@
 # Connactor — Agent Guidelines
 
+> [!IMPORTANT]
+> **CRITICAL RULE**: Never commit directly to `main` under any circumstances, even for quick fixes, tests, or tasks requested as "real quick" by the user. 
+> You MUST always create a feature branch off `main` before editing any files, make your changes on that branch, and then open a Pull Request (PR) for review.
+
 ## Workflow: one issue = one branch = one PR
 
 For every GitHub issue you implement:
