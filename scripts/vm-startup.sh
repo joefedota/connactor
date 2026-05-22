@@ -39,8 +39,8 @@ services:
   neo4j:
     image: neo4j:5-community
     restart: always
-    ports: []
-    expose: ["7474", "7687"]
+    ports:
+      - "7687:7687"
     volumes:
       - /data/neo4j/data:/data
       - /data/neo4j/logs:/logs

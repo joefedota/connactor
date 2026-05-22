@@ -1,0 +1,24 @@
+# Files NOT uploaded to Cloud Build.
+# Same intent as .dockerignore, but enforced one layer earlier (the tarball
+# uploaded to Cloud Storage staging) so we don't ship 1+ GB of local pipeline data.
+
+.git/
+.gitignore
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local-only pipeline output — runtime fetches these from GCS instead
+data/raw/
+data/processed/
+*.dump
+
+# Local dev / debug only
+tests/
+bin/
+scripts/
+.env
+
+.DS_Store
