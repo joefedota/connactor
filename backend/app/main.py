@@ -7,29 +7,22 @@ Endpoints:
   POST /solve                                   — all optimal paths (give up / end)
   GET  /autocomplete?q=...&type=actor|movie     — prefix search (unconstrained)
   GET  /autocomplete/neighbors?node_id=...&type=actor|movie  — neighbors of a node
+  GET  /connected?a=...&b=...                   — edge existence check
 """
 from __future__ import annotations
 
 import random
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.bfs import (
-    bfs_shortest_path_length,
-    find_all_shortest_paths,
-    neighbors_of_type,
-    path_to_display,
-    validate_path,
-)
-from app.autocomplete import filter_neighbors, query_autocomplete
-from app.graph_store import GraphStore, get_store, load_store
+from app.db import get_driver
 from app.models import (
     AutocompleteResponse,
+    Difficulty,
     GameResponse,
     NodeInfo,
     SolveRequest,
@@ -38,13 +31,38 @@ from app.models import (
     ValidateResponse,
 )
 
-PROCESSED_DIR = Path(__file__).parent.parent / "data" / "processed"
+MAX_GAME_ATTEMPTS = 50
+MIN_HOPS = 2
+MAX_HOPS = 6
+
+# Rank pools per difficulty: actors are sorted by popularity (rank 0 = most famous)
+_DIFFICULTY_POOL: dict[Difficulty | None, int] = {
+    "easy": 50,
+    "medium": 200,
+    "hard": 1000,
+    None: 500,
+}
+
+
+def _classify_difficulty(rank_a: int, rank_b: int, hops: int) -> Difficulty:
+    max_rank = max(rank_a, rank_b)
+    if hops == 2 and max_rank < 50:
+        return "easy"
+    elif hops <= 4 and max_rank < 200:
+        return "medium"
+    elif hops <= 6 and max_rank < 1000:
+        return "hard"
+    else:
+        return "expert"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    load_store(PROCESSED_DIR)
+    driver = get_driver()
+    await driver.verify_connectivity()
+    app.state.neo4j = driver
     yield
+    await driver.close()
 
 
 app = FastAPI(title="Connactor API", lifespan=lifespan)
@@ -57,244 +75,330 @@ app.add_middleware(
 )
 
 
-MAX_GAME_ATTEMPTS = 50
-MIN_HOPS = 2
-MAX_HOPS = 6
+def _actor_to_node(record, key: str = "a") -> NodeInfo:
+    node = record[key]
+    return NodeInfo(
+        type="actor",
+        id=str(node["person_id"]),
+        label=node["name"],
+        popularity=node.get("popularity"),
+    )
 
 
-def classify_difficulty(G, source_id: str, target_id: str, hops: int) -> str:
-    """Classify game difficulty based on path length and actor popularity."""
-    P_source = G.nodes[source_id].get("popularity", 0.0)
-    P_target = G.nodes[target_id].get("popularity", 0.0)
-    P_min = min(P_source, P_target)
-
-    if hops == 2 and P_min >= 5.0:
-        return "easy"
-    elif hops <= 4 and P_min >= 4.0:
-        return "medium"
-    elif hops <= 6 and P_min >= 3.0:
-        return "hard"
-    else:
-        return "expert"
+def _movie_to_node(record, key: str = "m") -> NodeInfo:
+    node = record[key]
+    return NodeInfo(
+        type="movie",
+        id=str(node["movie_id"]),
+        label=node["title"],
+        year=str(node["year"]) if node.get("year") else None,
+    )
 
 
 @app.get("/game", response_model=GameResponse)
-def get_game(
-    difficulty: Optional[str] = Query(
-        None, pattern="^(easy|medium|hard|expert)$"
-    )
+async def get_game(
+    request: Request,
+    difficulty: Optional[Difficulty] = Query(None),
 ):
-    """
-    Pick two random eligible actors with a valid 2-6 hop path via live BFS,
-    optionally filtering to a requested difficulty.
-    """
-    store = get_store()
-    G = store.graph
-    pool = store.eligible_actors
+    pool_size = _DIFFICULTY_POOL[difficulty]
+    driver = request.app.state.neo4j
 
-    fallback_pair = None
-    fallback_diff = None
+    async with driver.session() as session:
+        for _ in range(MAX_GAME_ATTEMPTS):
+            result = await session.run(
+                """
+                MATCH (a:Actor) WHERE a.rank < $pool_size
+                WITH a ORDER BY rand() LIMIT 2
+                WITH collect(a) AS actors
+                WHERE size(actors) = 2
+                WITH actors[0] AS source, actors[1] AS target
+                MATCH p = shortestPath((source)-[:APPEARED_IN*..12]-(target))
+                WHERE length(p) >= $min_hops AND length(p) <= $max_hops
+                RETURN source, target, length(p) AS hops
+                """,
+                pool_size=pool_size,
+                min_hops=MIN_HOPS,
+                max_hops=MAX_HOPS,
+            )
+            record = await result.single()
+            if record is None:
+                continue
 
-    for _ in range(MAX_GAME_ATTEMPTS):
-        source_id, target_id = random.sample(pool, 2)
-        hops = bfs_shortest_path_length(G, source_id, target_id)
-        if hops is not None and MIN_HOPS <= hops <= MAX_HOPS:
-            diff = classify_difficulty(G, source_id, target_id, hops)
+            hops = record["hops"]
+            source = record["source"]
+            target = record["target"]
+            diff = _classify_difficulty(source["rank"], target["rank"], hops)
+
             if difficulty is None or diff == difficulty:
                 return GameResponse(
                     game_id=str(uuid.uuid4()),
                     source=NodeInfo(
                         type="actor",
-                        id=source_id,
-                        label=G.nodes[source_id]["name"],
-                        popularity=G.nodes[source_id].get("popularity"),
+                        id=str(source["person_id"]),
+                        label=source["name"],
+                        popularity=source.get("popularity"),
                     ),
                     target=NodeInfo(
                         type="actor",
-                        id=target_id,
-                        label=G.nodes[target_id]["name"],
-                        popularity=G.nodes[target_id].get("popularity"),
+                        id=str(target["person_id"]),
+                        label=target["name"],
+                        popularity=target.get("popularity"),
                     ),
                     difficulty=diff,
                 )
-            if fallback_pair is None:
-                fallback_pair = (source_id, target_id)
-                fallback_diff = diff
-
-    # If we requested a specific difficulty and didn't find one in 50 tries,
-    # but found at least one valid pair, fall back to it gracefully
-    if fallback_pair is not None:
-        source_id, target_id = fallback_pair
-        return GameResponse(
-            game_id=str(uuid.uuid4()),
-            source=NodeInfo(
-                type="actor",
-                id=source_id,
-                label=G.nodes[source_id]["name"],
-                popularity=G.nodes[source_id].get("popularity"),
-            ),
-            target=NodeInfo(
-                type="actor",
-                id=target_id,
-                label=G.nodes[target_id]["name"],
-                popularity=G.nodes[target_id].get("popularity"),
-            ),
-            difficulty=fallback_diff,
-        )
 
     raise HTTPException(status_code=503, detail="Could not find a valid pair. Try again.")
 
 
 @app.post("/validate", response_model=ValidateResponse)
-def post_validate(body: ValidateRequest):
-    """
-    Validate the user's in-progress path.
-    Returns is_complete=True when path[-1] == target and path is valid.
-    Returns is_optimal=True when completed path length equals BFS minimum.
-    """
-    store = get_store()
-    G = store.graph
+async def post_validate(request: Request, body: ValidateRequest):
+    driver = request.app.state.neo4j
+    path = body.path
 
-    if body.source_nconst not in G:
-        raise HTTPException(status_code=400, detail=f"Unknown source: {body.source_nconst}")
-    if body.target_nconst not in G:
-        raise HTTPException(status_code=400, detail=f"Unknown target: {body.target_nconst}")
+    if not path:
+        return ValidateResponse(valid=False, error="Path is empty")
+    if path[0] != body.source_id:
+        return ValidateResponse(valid=False, error=f"Path must start with source actor {body.source_id}")
+    if len(path) < 3:
+        return ValidateResponse(valid=False, error="Path must have at least 3 nodes (actor → movie → actor)")
+    if len(path) % 2 == 0:
+        return ValidateResponse(valid=False, error="Path length must be odd (actor → movie → actor → ...)")
 
-    valid, error = validate_path(G, body.path, body.source_nconst, body.target_nconst)
-    if not valid:
-        return ValidateResponse(valid=False, error=error)
+    # Check for repeated movies
+    movie_ids_seen: set[str] = set()
+    for i, node_id in enumerate(path):
+        if i % 2 == 1:  # movie position
+            if node_id in movie_ids_seen:
+                return ValidateResponse(valid=False, error=f"Movie {node_id} appears twice in the path")
+            movie_ids_seen.add(node_id)
 
-    is_complete = len(body.path) >= 3 and body.path[-1] == body.target_nconst
+    # Build edge list: [(actor_id, movie_id), ...]
+    edges = [
+        (int(path[i]), int(path[i + 1]))
+        for i in range(0, len(path) - 1, 2)
+    ]
+
+    async with driver.session() as session:
+        # Check all edges exist in one query
+        result = await session.run(
+            """
+            UNWIND $edges AS edge
+            OPTIONAL MATCH (a:Actor {person_id: edge[0]})-[:APPEARED_IN]->(m:Movie {movie_id: edge[1]})
+            RETURN edge[0] AS actor_id, edge[1] AS movie_id, m IS NOT NULL AS valid
+            """,
+            edges=edges,
+        )
+        records = await result.data()
+
+    for row in records:
+        if not row["valid"]:
+            return ValidateResponse(
+                valid=False,
+                error=f"Actor {row['actor_id']} did not appear in movie {row['movie_id']}",
+            )
+
+    is_complete = path[-1] == body.target_id
     is_optimal: Optional[bool] = None
-    if is_complete:
-        min_hops = bfs_shortest_path_length(G, body.source_nconst, body.target_nconst)
-        player_hops = len(body.path) - 1  # edge count
-        is_optimal = (min_hops is not None and player_hops == min_hops)
 
-    return ValidateResponse(
-        valid=True,
-        is_complete=is_complete,
-        is_optimal=is_optimal,
-    )
+    if is_complete:
+        async with driver.session() as session:
+            result = await session.run(
+                """
+                MATCH p = shortestPath(
+                    (a1:Actor {person_id: $source})-[:APPEARED_IN*..12]-(a2:Actor {person_id: $target})
+                )
+                RETURN length(p) AS hops
+                """,
+                source=int(body.source_id),
+                target=int(body.target_id),
+            )
+            record = await result.single()
+        if record:
+            min_hops = record["hops"]
+            player_hops = len(path) - 1
+            is_optimal = player_hops == min_hops
+
+    return ValidateResponse(valid=True, is_complete=is_complete, is_optimal=is_optimal)
 
 
 @app.post("/solve", response_model=SolveResponse)
-def post_solve(body: SolveRequest):
-    """Return all optimal paths between source and target (up to 10)."""
-    store = get_store()
-    G = store.graph
+async def post_solve(request: Request, body: SolveRequest):
+    driver = request.app.state.neo4j
 
-    if body.source_nconst not in G:
-        raise HTTPException(status_code=400, detail=f"Unknown source: {body.source_nconst}")
-    if body.target_nconst not in G:
-        raise HTTPException(status_code=400, detail=f"Unknown target: {body.target_nconst}")
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH p = allShortestPaths(
+                (a1:Actor {person_id: $source})-[:APPEARED_IN*..12]-(a2:Actor {person_id: $target})
+            )
+            RETURN [n IN nodes(p) | CASE labels(n)[0]
+                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity}
+                WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year)}
+            END] AS path,
+            length(p) AS hops
+            LIMIT 10
+            """,
+            source=int(body.source_id),
+            target=int(body.target_id),
+        )
+        records = await result.data()
 
-    hop_count = bfs_shortest_path_length(G, body.source_nconst, body.target_nconst)
-    if hop_count is None:
+    if not records:
         raise HTTPException(status_code=404, detail="No path exists between these actors.")
 
-    raw_paths = find_all_shortest_paths(G, body.source_nconst, body.target_nconst)
-    display_paths = [
-        [NodeInfo(**node) for node in path_to_display(G, p)]
-        for p in raw_paths
+    hop_count = records[0]["hops"]
+    paths = [
+        [NodeInfo(**node) for node in rec["path"]]
+        for rec in records
     ]
-    return SolveResponse(hop_count=hop_count, paths=display_paths)
+    return SolveResponse(hop_count=hop_count, paths=paths)
 
 
 @app.get("/autocomplete", response_model=AutocompleteResponse)
-def get_autocomplete(
+async def get_autocomplete(
+    request: Request,
     q: str = Query(..., min_length=2),
     type: str = Query(..., pattern="^(actor|movie)$"),
     limit: int = Query(10, ge=1, le=20),
 ):
-    """Unconstrained prefix search over all actors or all movies."""
-    store = get_store()
-    trie = store.actor_trie if type == "actor" else store.movie_trie
-    results = query_autocomplete(trie, q, limit * 3)  # fetch extra, then sort
+    driver = request.app.state.neo4j
 
-    if type == "actor":
-        results.sort(key=lambda r: r.get("popularity", 0.0), reverse=True)
-    else:
-        results.sort(key=lambda r: r.get("votes", 0), reverse=True)
-
-    return AutocompleteResponse(
-        results=[
-            NodeInfo(
-                type=r["type"],
-                id=r["id"],
-                label=r["label"],
-                year=r.get("year"),
-                popularity=r.get("popularity"),
+    async with driver.session() as session:
+        if type == "actor":
+            result = await session.run(
+                """
+                CALL db.index.fulltext.queryNodes('actorNames', $search)
+                YIELD node, score
+                RETURN node.person_id AS id, node.name AS label,
+                       node.popularity AS popularity, node.profile_path AS profile_path
+                ORDER BY node.popularity DESC
+                LIMIT $limit
+                """,
+                search=q + "*",
+                limit=limit,
             )
-            for r in results[:limit]
-        ]
-    )
+        else:
+            result = await session.run(
+                """
+                CALL db.index.fulltext.queryNodes('movieTitles', $search)
+                YIELD node, score
+                RETURN node.movie_id AS id, node.title AS label,
+                       node.year AS year, node.vote_count AS vote_count
+                ORDER BY node.vote_count DESC
+                LIMIT $limit
+                """,
+                search=q + "*",
+                limit=limit,
+            )
+        records = await result.data()
+
+    results = []
+    for rec in records:
+        if type == "actor":
+            results.append(NodeInfo(
+                type="actor",
+                id=str(rec["id"]),
+                label=rec["label"],
+                popularity=rec.get("popularity"),
+            ))
+        else:
+            results.append(NodeInfo(
+                type="movie",
+                id=str(rec["id"]),
+                label=rec["label"],
+                year=str(rec["year"]) if rec.get("year") else None,
+            ))
+
+    return AutocompleteResponse(results=results)
 
 
 @app.get("/autocomplete/neighbors", response_model=AutocompleteResponse)
-def get_autocomplete_neighbors(
+async def get_autocomplete_neighbors(
+    request: Request,
     node_id: str = Query(...),
     type: str = Query(..., pattern="^(actor|movie)$"),
     q: str = Query(""),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """
-    Return neighbors of node_id filtered to the given type.
-    Optionally filter by prefix q for further narrowing.
-    Used by the game board: after selecting an actor, fetch their movies;
-    after selecting a movie, fetch other actors in it.
-    """
-    store = get_store()
-    G = store.graph
+    driver = request.app.state.neo4j
 
-    if node_id not in G:
-        raise HTTPException(status_code=404, detail=f"Unknown node: {node_id}")
+    async with driver.session() as session:
+        if type == "actor":
+            # node_id is a movie — fetch its actors
+            cypher = """
+                MATCH (m:Movie {movie_id: $node_id})<-[:APPEARED_IN]-(a:Actor)
+                WHERE $q = '' OR toLower(a.name) CONTAINS toLower($q)
+                RETURN a.person_id AS id, a.name AS label, a.popularity AS popularity
+                ORDER BY a.popularity DESC
+                LIMIT $limit
+            """
+        else:
+            # node_id is an actor — fetch their movies
+            cypher = """
+                MATCH (a:Actor {person_id: $node_id})-[:APPEARED_IN]->(m:Movie)
+                WHERE $q = '' OR toLower(m.title) CONTAINS toLower($q)
+                RETURN m.movie_id AS id, m.title AS label, m.year AS year, m.vote_count AS vote_count
+                ORDER BY m.vote_count DESC
+                LIMIT $limit
+            """
+        result = await session.run(cypher, node_id=int(node_id), q=q, limit=limit)
+        records = await result.data()
 
-    neighbor_ids = set(neighbors_of_type(G, node_id, type))
-    index = store.actor_index if type == "actor" else store.movie_index
-    candidates = filter_neighbors(index, neighbor_ids)
+    results = []
+    for rec in records:
+        if type == "actor":
+            results.append(NodeInfo(
+                type="actor",
+                id=str(rec["id"]),
+                label=rec["label"],
+                popularity=rec.get("popularity"),
+            ))
+        else:
+            results.append(NodeInfo(
+                type="movie",
+                id=str(rec["id"]),
+                label=rec["label"],
+                year=str(rec["year"]) if rec.get("year") else None,
+            ))
 
-    if q and len(q) >= 2:
-        trie = store.actor_trie if type == "actor" else store.movie_trie
-        matched = query_autocomplete(trie, q, limit * 5)
-        matched_ids = {m["id"] for m in matched}
-        candidates = [c for c in candidates if c["id"] in matched_ids]
-
-    if type == "actor":
-        candidates.sort(key=lambda x: x.get("popularity", 0.0), reverse=True)
-    else:
-        candidates.sort(key=lambda x: x.get("votes", 0), reverse=True)
-
-    return AutocompleteResponse(
-        results=[
-            NodeInfo(
-                type=c["type"],
-                id=c["id"],
-                label=c["label"],
-                year=c.get("year"),
-                popularity=c.get("popularity"),
-            )
-            for c in candidates[:limit]
-        ]
-    )
+    return AutocompleteResponse(results=results)
 
 
 @app.get("/connected")
-def get_connected(a: str = Query(...), b: str = Query(...)):
-    """Check whether two nodes share an edge in the graph."""
-    store = get_store()
-    G = store.graph
-    if a not in G or b not in G:
-        raise HTTPException(status_code=404, detail="Unknown node ID")
-    return {"connected": G.has_edge(a, b)}
+async def get_connected(
+    request: Request,
+    a: str = Query(...),
+    b: str = Query(...),
+):
+    # The frontend calls this with adjacent path nodes (always actor+movie in either order).
+    # Try both orderings so either (actor_id, movie_id) or (movie_id, actor_id) works.
+    driver = request.app.state.neo4j
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            RETURN EXISTS {
+                MATCH (:Actor {person_id: $a})-[:APPEARED_IN]->(:Movie {movie_id: $b})
+            } OR EXISTS {
+                MATCH (:Actor {person_id: $b})-[:APPEARED_IN]->(:Movie {movie_id: $a})
+            } AS connected
+            """,
+            a=int(a),
+            b=int(b),
+        )
+        record = await result.single()
+    return {"connected": record["connected"] if record else False}
 
 
 @app.get("/health")
-def health():
-    store = get_store()
+async def health(request: Request):
+    driver = request.app.state.neo4j
+    async with driver.session() as session:
+        r1 = await (await session.run("MATCH (a:Actor) RETURN count(a) AS n")).single()
+        r2 = await (await session.run("MATCH (m:Movie) RETURN count(m) AS n")).single()
+        r3 = await (await session.run("MATCH ()-[r:APPEARED_IN]->() RETURN count(r) AS n")).single()
     return {
         "status": "ok",
-        "nodes": store.graph.number_of_nodes(),
-        "edges": store.graph.number_of_edges(),
-        "eligible_actors": len(store.eligible_actors),
+        "actors": r1["n"],
+        "movies": r2["n"],
+        "edges": r3["n"],
     }

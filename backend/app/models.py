@@ -1,16 +1,18 @@
 """Pydantic models for all API request/response shapes."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
+Difficulty = Literal["easy", "medium", "hard", "expert"]
+
 
 class NodeInfo(BaseModel):
-    type: str   # "actor" | "movie"
-    id: str     # nconst or tconst
-    label: str  # actor name or movie title
-    year: Optional[str] = None  # movies only
+    type: str            # "actor" | "movie"
+    id: str              # TMDB person_id or movie_id as string
+    label: str           # actor name or movie title
+    year: Optional[str] = None          # movies only
     popularity: Optional[float] = None  # actors only
 
 
@@ -18,13 +20,13 @@ class GameResponse(BaseModel):
     game_id: str
     source: NodeInfo
     target: NodeInfo
-    difficulty: str
+    difficulty: Difficulty
 
 
 class ValidateRequest(BaseModel):
-    source_nconst: str
-    target_nconst: str
-    path: List[str]   # alternating nconst/tconst IDs
+    source_id: str
+    target_id: str
+    path: List[str]   # alternating actor/movie IDs as strings
 
 
 class ValidateResponse(BaseModel):
@@ -35,8 +37,8 @@ class ValidateResponse(BaseModel):
 
 
 class SolveRequest(BaseModel):
-    source_nconst: str
-    target_nconst: str
+    source_id: str
+    target_id: str
 
 
 class SolveResponse(BaseModel):

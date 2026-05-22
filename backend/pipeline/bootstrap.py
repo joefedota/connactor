@@ -2,7 +2,7 @@
 """
 Connactor Bootstrap — one-command local Neo4j setup.
 
-Dev mode (default): crawls top 1000 movies, enriches persons, loads into Neo4j (~15 min).
+Dev mode (default): crawls top N movies (default 1000), enriches persons, loads into Neo4j (~15 min per 1000).
 Prod mode: full dataset (~35k movies, ~4-6 hrs).
 
 All intermediate artifacts live in GCS. Neo4j must be running before calling this script.
@@ -32,12 +32,12 @@ logger = logging.getLogger(__name__)
 
 DEV_BLOB = "pipeline/movie_ids_dev.json"
 PROD_BLOB = "pipeline/movie_ids_to_crawl.json"
-DEV_SAMPLE_SIZE = 1000
+DEV_SAMPLE_SIZE_DEFAULT = 1000
 
 
-def _build_dev_blob() -> None:
-    if gcs.blob_exists(DEV_BLOB):
-        logger.info("[%s] already exists in GCS — skipping dev slice.", DEV_BLOB)
+def _build_dev_blob(sample_size: int, force: bool = False) -> None:
+    if not force and gcs.blob_exists(DEV_BLOB):
+        logger.info("[%s] already exists in GCS — skipping dev slice (use --force-dev to rebuild).", DEV_BLOB)
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -48,7 +48,7 @@ def _build_dev_blob() -> None:
         with open(full_path) as f:
             movies = json.load(f)
 
-        dev_movies = movies[:DEV_SAMPLE_SIZE]
+        dev_movies = movies[:sample_size]
         dev_path = Path(tmpdir) / "dev.json"
         with open(dev_path, "w") as f:
             json.dump(dev_movies, f)
@@ -74,6 +74,10 @@ def main() -> None:
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--skip-credits", action="store_true")
     parser.add_argument("--skip-persons", action="store_true")
+    parser.add_argument("--dev-size", type=int, default=DEV_SAMPLE_SIZE_DEFAULT,
+                        help="Number of top movies for dev mode (default: %(default)s)")
+    parser.add_argument("--force-dev", action="store_true",
+                        help="Rebuild the dev movie slice in GCS even if it already exists")
     args = parser.parse_args()
 
     logger.info("=== Connactor Bootstrap (mode=%s) ===", args.mode)
@@ -82,7 +86,10 @@ def main() -> None:
         _step("Download movie IDs", download_ids)
 
     if args.mode == "dev":
-        _step("Build dev seed (top 1000)", _build_dev_blob)
+        _step(
+            f"Build dev seed (top {args.dev_size})",
+            lambda: _build_dev_blob(args.dev_size, force=args.force_dev),
+        )
         movies_blob = DEV_BLOB
     else:
         movies_blob = PROD_BLOB

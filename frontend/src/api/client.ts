@@ -29,23 +29,23 @@ export function fetchGame(difficulty?: string): Promise<GameResponse> {
 }
 
 export function validatePath(
-  source_nconst: string,
-  target_nconst: string,
+  source_id: string,
+  target_id: string,
   path: string[],
 ): Promise<ValidateResponse> {
   return request('/validate', {
     method: 'POST',
-    body: JSON.stringify({ source_nconst, target_nconst, path }),
+    body: JSON.stringify({ source_id, target_id, path }),
   });
 }
 
 export function solve(
-  source_nconst: string,
-  target_nconst: string,
+  source_id: string,
+  target_id: string,
 ): Promise<SolveResponse> {
   return request('/solve', {
     method: 'POST',
-    body: JSON.stringify({ source_nconst, target_nconst }),
+    body: JSON.stringify({ source_id, target_id }),
   });
 }
 

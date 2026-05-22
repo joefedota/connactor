@@ -148,33 +148,28 @@ ORDER BY a.popularity DESC LIMIT 20
 ### Added
 
 ```python
-# app/db.py
+# app/db.py  (Phase 2 — implemented)
 from neo4j import AsyncGraphDatabase
-import redis.asyncio as redis
+from settings import settings
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.neo4j = AsyncGraphDatabase.driver(NEO4J_URI, auth=(USER, PASS))
-    app.state.redis = redis.from_url(REDIS_URL)
-    yield
-    await app.state.neo4j.close()
-    await app.state.redis.close()
+def get_driver():
+    return AsyncGraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password))
 ```
 
 API starts in ~1 second. Stateless — any number of instances can run against the same Neo4j.
 
 ### Endpoint mapping
 
-| Endpoint | v1 | Production |
-|---|---|---|
-| `GET /game` | Python BFS, 50-retry loop | Redis pair pool pop; Neo4j fallback |
-| `POST /validate` | NetworkX edge lookup | Neo4j EXISTS check |
-| `POST /solve` | Custom all-paths DFS | Neo4j `allShortestPaths()` |
-| `GET /autocomplete` | Custom Trie | Neo4j full-text index |
-| `GET /autocomplete/neighbors` | NetworkX neighbors + Trie | Neo4j neighbor query |
-| `GET /connected` | NetworkX edge check | Neo4j EXISTS check |
+| Endpoint | v1 | Phase 2 (current) | Production |
+|---|---|---|---|
+| `GET /game` | Python BFS, 50-retry loop | Cypher `shortestPath` over rank-bounded random pool | Redis pair pool pop; Cypher fallback |
+| `POST /validate` | NetworkX edge lookup | Cypher `OPTIONAL MATCH` via `UNWIND` | Unchanged |
+| `POST /solve` | Custom all-paths DFS | Cypher `allShortestPaths()` | Unchanged |
+| `GET /autocomplete` | Custom Trie | Neo4j full-text index (`actorNames` / `movieTitles`) | Unchanged |
+| `GET /autocomplete/neighbors` | NetworkX neighbors + Trie | Neo4j neighbor query with optional substring filter | Unchanged |
+| `GET /connected` | NetworkX edge check | Cypher `EXISTS` — checks actor+movie APPEARED_IN edge | Unchanged |
 
-All request/response shapes are identical — no frontend changes required.
+Request/response shapes preserved; `source_nconst`/`target_nconst` renamed to `source_id`/`target_id` (now TMDB integer strings).
 
 ---
 
