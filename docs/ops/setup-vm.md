@@ -4,6 +4,25 @@ Provisions the GCP VM that runs Neo4j for production. The VM hosts the database 
 
 The VM provisions itself via [`scripts/vm-startup.sh`](../../scripts/vm-startup.sh), which mounts the data disk, installs Docker, fetches the Neo4j password from Secret Manager, and starts Neo4j. The runbook below creates the surrounding infrastructure (disk, IP, firewall, service account) and hands the startup script to the VM at create time.
 
+## Why a separate persistent disk?
+
+Neo4j writes its database files to `/data` inside the container. The container itself is ephemeral — delete it and everything in its writable layer is gone. To make the data durable, we layer storage like this:
+
+```
+100GB SSD (persistent disk, separate GCP resource)
+  └─ mounted at /data on the host (ext4)
+        └─ docker-compose bind-mounts /data/neo4j/data → /data inside the Neo4j container
+              └─ Neo4j writes here
+```
+
+The disk is a separate GCP resource from the VM, which buys us three things:
+
+- **Survives VM deletion.** Delete and recreate the VM and the data is still there — you just reattach the disk.
+- **Independent snapshots.** The daily 03:00 UTC snapshot schedule is attached to the data disk only. We back up what matters, not the OS.
+- **Sized and tuned for Neo4j.** 100GB pd-ssd vs. the 20GB boot disk; SSD I/O matters once the dataset grows beyond the page cache.
+
+The `mkfs.ext4` in the startup script is gated by `blkid` — it only formats a blank disk. Once formatted (after first boot), every subsequent boot just mounts the existing filesystem, preserving all data.
+
 ## Prerequisites
 
 - `gcloud` CLI installed and authenticated (`gcloud auth login`)
