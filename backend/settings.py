@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "connactorpassword"
     gcs_bucket: str = "connactor-data"
+    gcp_project: str = "connactor-497019"
 
 
 settings = Settings()

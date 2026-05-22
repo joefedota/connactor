@@ -17,22 +17,11 @@ Connect two actors through shared movies in as few hops as possible.
 
 ## GCP Setup (one-time)
 
-All pipeline artifacts (crawled data, Neo4j dumps) live in GCS. You need a GCP project with billing enabled and a bucket.
+All pipeline artifacts (crawled data, Neo4j dumps) live in the shared `connactor-data` GCS bucket in project `connactor-497019`. Ask the project owner for access, then authenticate:
 
 ```bash
-# Authenticate
 gcloud auth application-default login
-
-# Create the GCS bucket (pick any region)
-gcloud storage buckets create gs://connactor-data \
-  --project=YOUR_PROJECT_ID \
-  --location=us-central1 \
-  --uniform-bucket-level-access
-```
-
-Set your project as default so you don't have to repeat it:
-```bash
-gcloud config set project YOUR_PROJECT_ID
+gcloud config set project connactor-497019
 ```
 
 ---
