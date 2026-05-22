@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 PERSONS_BLOB = "pipeline/persons_crawl.jsonl"
 CREDITS_BLOB = "pipeline/credits_crawl.jsonl"
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent.parent / "migrations" / "schema.cql"
+SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "migrations" / "schema.cql"
 
 ACTOR_BATCH = 1000
 MOVIE_BATCH = 1000

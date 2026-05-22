@@ -105,13 +105,13 @@ docker exec connactor-neo4j-dev cypher-shell -u neo4j -p connactorpassword \
 Once the graph is loaded, dump it to GCS so other developers can skip the bootstrap entirely:
 
 ```bash
-./scripts/dump-neo4j.sh dev
+./backend/scripts/dump-neo4j.sh dev
 ```
 
 Other developers can then restore in seconds instead of re-crawling:
 
 ```bash
-./scripts/setup-local-neo4j.sh dev
+./backend/scripts/setup-local-neo4j.sh dev
 ```
 
 ---
@@ -137,18 +137,17 @@ uv run pytest
 connactor/
   backend/
     app/              # FastAPI application (Phase 2: will connect to Neo4j)
+    migrations/
+      schema.cql      # Neo4j constraints + full-text indexes
     scripts/
       bootstrap.py    # One-command pipeline orchestrator
+      dump-neo4j.sh   # Dump local Neo4j → GCS
+      setup-local-neo4j.sh  # Restore from GCS dump (or bootstrap from scratch)
       ingest/         # TMDB crawlers + Neo4j loader
       utils/          # Shared GCS helpers
     settings.py       # Pydantic settings (reads from .env)
     tests/
   frontend/           # React + TypeScript + Vite
-  migrations/
-    schema.cql        # Neo4j constraints + full-text indexes
-  scripts/
-    dump-neo4j.sh     # Dump local Neo4j → GCS
-    setup-local-neo4j.sh  # Restore from GCS dump (or bootstrap from scratch)
   docker-compose.yml  # Local Neo4j
 ```
 
