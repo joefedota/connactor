@@ -24,6 +24,7 @@ sys.path.insert(0, str(_SCRIPTS_DIR.parent))
 
 import utils.gcs as gcs
 from ingest.crawl_credits import run as crawl_credits
+from ingest.crawl_delta import run as crawl_delta
 from ingest.crawl_persons import run as crawl_persons
 from ingest.download_movie_ids import run as download_ids
 from ingest.load_neo4j import run as load_neo4j
@@ -78,31 +79,43 @@ def main() -> None:
                         help="Number of top movies for dev mode (default: %(default)s)")
     parser.add_argument("--force-dev", action="store_true",
                         help="Rebuild the dev movie slice in GCS even if it already exists")
+    parser.add_argument("--delta", action="store_true",
+                        help="Delta refresh: only re-crawl movies changed in TMDB since yesterday "
+                             "(via /movie/changes). Skips download_ids and dev-slice steps. "
+                             "Requires --mode prod.")
     args = parser.parse_args()
 
-    logger.info("=== Connactor Bootstrap (mode=%s) ===", args.mode)
+    if args.delta and args.mode != "prod":
+        parser.error("--delta requires --mode prod")
 
-    if not args.skip_download:
-        _step("Download movie IDs", download_ids)
+    logger.info("=== Connactor Bootstrap (mode=%s%s) ===", args.mode, ", delta" if args.delta else "")
 
-    if args.mode == "dev":
-        _step(
-            f"Build dev seed (top {args.dev_size})",
-            lambda: _build_dev_blob(args.dev_size, force=args.force_dev),
-        )
-        movies_blob = DEV_BLOB
-    else:
+    if args.delta:
         movies_blob = PROD_BLOB
+        if not args.skip_credits:
+            _step("Crawl delta credits", crawl_delta)
+    else:
+        if not args.skip_download:
+            _step("Download movie IDs", download_ids)
 
-    if not args.skip_credits:
-        _step("Crawl credits", lambda: crawl_credits(movies_blob=movies_blob))
+        if args.mode == "dev":
+            _step(
+                f"Build dev seed (top {args.dev_size})",
+                lambda: _build_dev_blob(args.dev_size, force=args.force_dev),
+            )
+            movies_blob = DEV_BLOB
+        else:
+            movies_blob = PROD_BLOB
+
+        if not args.skip_credits:
+            _step("Crawl credits", lambda: crawl_credits(movies_blob=movies_blob))
 
     if not args.skip_persons:
         _step("Enrich persons", crawl_persons)
 
     _step("Load Neo4j", lambda: load_neo4j(movies_blob=movies_blob))
 
-    logger.info("=== Bootstrap complete (%s mode) ===", args.mode)
+    logger.info("=== Bootstrap complete (%s mode%s) ===", args.mode, ", delta" if args.delta else "")
 
 
 if __name__ == "__main__":

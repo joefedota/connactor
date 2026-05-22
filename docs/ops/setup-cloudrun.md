@@ -83,7 +83,7 @@ gcloud run deploy connactor-api \
   --set-env-vars "NEO4J_URI=bolt://10.128.0.2:7687,NEO4J_USER=neo4j,GCS_BUCKET=connactor-data,GCP_PROJECT=connactor-497019" \
   --network default \
   --subnet default \
-  --vpc-egress all-traffic \
+  --vpc-egress private-ranges-only \
   --min-instances 0 \
   --max-instances 10 \
   --allow-unauthenticated \
@@ -92,7 +92,7 @@ gcloud run deploy connactor-api \
 ```
 
 Key flags:
-- `--network default --subnet default --vpc-egress all-traffic` — Direct VPC Egress, so the service can reach `10.128.0.2:7687` privately. No VPC Connector needed.
+- `--network default --subnet default --vpc-egress private-ranges-only` — Direct VPC Egress for private IPs (Neo4j VM at `10.128.0.2`); public traffic uses Cloud Run's default internet egress. **Don't use `all-traffic` unless you've set up Cloud NAT** — our VPC has no internet route, so `all-traffic` would break any call to Google APIs or TMDB.
 - `--set-secrets` — Secret Manager values injected as env vars at request time. Rotating a secret in Secret Manager takes effect on the next request without redeploying.
 - `--min-instances 0` — scale to zero when idle. Cold start is ~2s including Neo4j connection check.
 - `--allow-unauthenticated` — the frontend (Cloudflare Pages) calls this directly. Restrict later if we add auth.
