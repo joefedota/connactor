@@ -17,7 +17,7 @@ import tempfile
 import time
 from pathlib import Path
 
-# Ensure ingest/utils packages (scripts/) and settings (backend/) are importable.
+# Ensure ingest package (pipeline/) and utils/settings (backend/) are importable.
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPTS_DIR))
 sys.path.insert(0, str(_SCRIPTS_DIR.parent))

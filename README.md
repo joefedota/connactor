@@ -69,18 +69,18 @@ Run the dev bootstrap — downloads the TMDB movie export, crawls the top 1,000 
 
 ```bash
 cd backend
-uv run python scripts/bootstrap.py --mode dev
+uv run python pipeline/bootstrap.py --mode dev
 ```
 
 Each step is idempotent. If it fails mid-run, re-run the same command and it resumes from the GCS checkpoint. To skip steps you've already completed:
 
 ```bash
-uv run python scripts/bootstrap.py --mode dev --skip-download --skip-credits --skip-persons
+uv run python pipeline/bootstrap.py --mode dev --skip-download --skip-credits --skip-persons
 ```
 
 For the full production dataset (~35k movies, ~4–6 hours):
 ```bash
-uv run python scripts/bootstrap.py --mode prod
+uv run python pipeline/bootstrap.py --mode prod
 ```
 
 ### 5. Verify the graph
@@ -105,13 +105,13 @@ docker exec connactor-neo4j-dev cypher-shell -u neo4j -p connactorpassword \
 Once the graph is loaded, dump it to GCS so other developers can skip the bootstrap entirely:
 
 ```bash
-./backend/scripts/dump-neo4j.sh dev
+./backend/bin/dump-neo4j.sh dev
 ```
 
 Other developers can then restore in seconds instead of re-crawling:
 
 ```bash
-./backend/scripts/setup-local-neo4j.sh dev
+./backend/bin/setup-local-neo4j.sh dev
 ```
 
 ---
@@ -137,14 +137,12 @@ uv run pytest
 connactor/
   backend/
     app/              # FastAPI application (Phase 2: will connect to Neo4j)
-    migrations/
-      schema.cql      # Neo4j constraints + full-text indexes
-    scripts/
+    bin/              # Shell scripts (dump/restore Neo4j)
+    migrations/       # Neo4j schema (constraints + indexes)
+    pipeline/         # Python data pipeline
       bootstrap.py    # One-command pipeline orchestrator
-      dump-neo4j.sh   # Dump local Neo4j → GCS
-      setup-local-neo4j.sh  # Restore from GCS dump (or bootstrap from scratch)
       ingest/         # TMDB crawlers + Neo4j loader
-      utils/          # Shared GCS helpers
+    utils/            # Shared Python utilities (GCS helpers)
     settings.py       # Pydantic settings (reads from .env)
     tests/
   frontend/           # React + TypeScript + Vite

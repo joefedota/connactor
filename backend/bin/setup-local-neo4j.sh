@@ -10,7 +10,7 @@ if [[ "$MODE" != "dev" && "$MODE" != "prod" ]]; then
   exit 1
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DUMPS_DIR="$REPO_ROOT/data/dumps"
 GCS_BLOB="dumps/neo4j-seed-${MODE}.dump"
 
@@ -21,8 +21,8 @@ echo "=== Connactor Neo4j Setup (mode=$MODE) ==="
 # Check if a GCS dump exists
 cd "$REPO_ROOT/backend"
 DUMP_EXISTS=$(uv run python -c "
-import sys; sys.path.insert(0, 'scripts')
-from ingest.gcs import blob_exists
+import sys; sys.path.insert(0, '.')
+from utils.gcs import blob_exists
 print('yes' if blob_exists('$GCS_BLOB') else 'no')
 ")
 
@@ -30,8 +30,8 @@ if [[ "$DUMP_EXISTS" == "yes" ]]; then
   echo "  Dump found in GCS: $GCS_BLOB"
   echo "  Downloading ..."
   uv run python -c "
-import sys; sys.path.insert(0, 'scripts')
-from ingest.gcs import download_to_file
+import sys; sys.path.insert(0, '.')
+from utils.gcs import download_to_file
 from pathlib import Path
 download_to_file('$GCS_BLOB', Path('$DUMPS_DIR/neo4j.dump'))
 print('  Downloaded.')
@@ -53,6 +53,6 @@ else
   docker compose -f "$REPO_ROOT/docker-compose.yml" up -d neo4j
   echo "  Waiting for Neo4j to be ready ..."
   sleep 10
-  uv run python scripts/bootstrap.py --mode "$MODE"
+  uv run python pipeline/bootstrap.py --mode "$MODE"
   echo "=== Setup complete (bootstrapped from TMDB) ==="
 fi

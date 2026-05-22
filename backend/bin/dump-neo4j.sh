@@ -11,7 +11,7 @@ if [[ "$MODE" != "dev" && "$MODE" != "prod" ]]; then
   exit 1
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DUMPS_DIR="$REPO_ROOT/data/dumps"
 DUMP_FILE="$DUMPS_DIR/neo4j-seed-${MODE}.dump"
 GCS_BLOB="dumps/neo4j-seed-${MODE}.dump"
@@ -37,8 +37,8 @@ docker compose -f "$REPO_ROOT/docker-compose.yml" start neo4j
 echo "  Uploading to GCS: $GCS_BLOB"
 cd "$REPO_ROOT/backend"
 uv run python -c "
-import sys; sys.path.insert(0, 'scripts')
-from ingest.gcs import upload_from_file
+import sys; sys.path.insert(0, '.')
+from utils.gcs import upload_from_file
 from pathlib import Path
 upload_from_file(Path('$DUMP_FILE'), '$GCS_BLOB')
 print('  Upload complete.')
