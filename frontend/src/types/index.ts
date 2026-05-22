@@ -1,6 +1,6 @@
 export interface NodeInfo {
   type: 'actor' | 'movie';
-  id: string;     // nconst or tconst
+  id: string;     // TMDB person_id or movie_id as string
   label: string;  // actor name or movie title
   year?: string;  // movies only
   popularity?: number; // actors only

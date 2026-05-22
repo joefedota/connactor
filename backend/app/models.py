@@ -7,10 +7,10 @@ from pydantic import BaseModel
 
 
 class NodeInfo(BaseModel):
-    type: str   # "actor" | "movie"
-    id: str     # nconst or tconst
-    label: str  # actor name or movie title
-    year: Optional[str] = None  # movies only
+    type: str            # "actor" | "movie"
+    id: str              # TMDB person_id or movie_id as string
+    label: str           # actor name or movie title
+    year: Optional[str] = None          # movies only
     popularity: Optional[float] = None  # actors only
 
 
@@ -22,9 +22,9 @@ class GameResponse(BaseModel):
 
 
 class ValidateRequest(BaseModel):
-    source_nconst: str
-    target_nconst: str
-    path: List[str]   # alternating nconst/tconst IDs
+    source_id: str
+    target_id: str
+    path: List[str]   # alternating actor/movie IDs as strings
 
 
 class ValidateResponse(BaseModel):
@@ -35,8 +35,8 @@ class ValidateResponse(BaseModel):
 
 
 class SolveRequest(BaseModel):
-    source_nconst: str
-    target_nconst: str
+    source_id: str
+    target_id: str
 
 
 class SolveResponse(BaseModel):
