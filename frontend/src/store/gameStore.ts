@@ -36,6 +36,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           isOptimal: null,
           allPaths: null,
           difficulty: resp.difficulty,
+          requestedDifficulty: difficulty,
         },
         isLoading: false,
       });

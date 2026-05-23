@@ -41,8 +41,9 @@ export function Results() {
   const reachedTarget = currentPath[currentPath.length - 1]?.id === target.id;
 
   const handlePlayAgain = async () => {
+    const nextDifficulty = game.requestedDifficulty;
     resetGame();
-    await fetchGame();
+    await fetchGame(nextDifficulty);
     navigate('/game');
   };
 

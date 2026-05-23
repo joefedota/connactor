@@ -16,7 +16,8 @@ export interface GameState {
   status: 'playing' | 'won' | 'gave_up';
   isOptimal: boolean | null; // set when game ends
   allPaths: NodeInfo[][] | null; // populated after /solve
-  difficulty: string;
+  difficulty: string;        // classification returned by the API
+  requestedDifficulty?: string; // what the player picked; undefined = random
 }
 
 export interface ValidateResponse {
