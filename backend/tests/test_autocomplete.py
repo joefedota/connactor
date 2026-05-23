@@ -24,11 +24,13 @@ async def test_autocomplete_movie_valid(client):
     data = response.json()
     assert "results" in data
     results = data["results"]
-    assert len(results) == 3
+    assert len(results) == 5
     # Check that it returns our test films, ordered by vote count
-    assert results[0]["label"] == "TestFilm One"  # 1000 votes
-    assert results[1]["label"] == "TestFilm Two"  # 500 votes
+    assert results[0]["label"] == "TestFilm One"    # 1000 votes
+    assert results[1]["label"] == "TestFilm Two"    # 500 votes
     assert results[2]["label"] == "TestFilm Three"  # 200 votes
+    assert results[3]["label"] == "TestFilm Four"   # 100 votes
+    assert results[4]["label"] == "TestFilm Five"   # 50 votes
     for node in results:
         assert node["type"] == "movie"
 
