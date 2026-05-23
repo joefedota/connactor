@@ -44,7 +44,7 @@
 - [x] Cloud Run service: secrets mounted as env vars, VPC egress enabled
 - [x] Cloud Run Jobs + Cloud Scheduler: nightly full re-crawl
 - [x] GitHub Actions CI/CD: test → build → push to Artifact Registry → deploy to Cloud Run (#12)
-- [ ] Cloudflare Pages for frontend + custom domain DNS (#13)
+- [x] Cloudflare Pages for frontend + custom domain DNS (connactor.com / api.connactor.com) (#13)
 
 ## Phase 4 — Images + Polish
 **Goal:** Actor headshots and movie posters in the UI.

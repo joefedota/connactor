@@ -227,7 +227,14 @@ Two GitHub Actions workflows:
 
 Authentication uses Workload Identity Federation (no static JSON keys in GitHub secrets). GitHub's OIDC token is exchanged for a short-lived GCP token that impersonates the existing `connactor-api` service account. One-time setup is in [`docs/ops/setup-wif.md`](./ops/setup-wif.md).
 
-Frontend will deploy via Cloudflare Pages on `main` (see issue #13). Neo4j on the VM is not touched by CI/CD — updated separately via the bootstrap pipeline.
+Frontend deploys via Cloudflare Pages on push to `main` (separate from the GitHub Actions deploy workflow — Cloudflare watches the GitHub repo directly). Neo4j on the VM is not touched by CI/CD — updated separately via the bootstrap pipeline.
+
+### Custom domains
+
+- `https://connactor.com` → Cloudflare Pages (proxied through Cloudflare's CDN, automatic Universal SSL)
+- `https://api.connactor.com` → Cloud Run service via [domain mapping](https://cloud.google.com/run/docs/mapping-custom-domains) (DNS-only CNAME to `ghs.googlehosted.com`, Google-managed SSL)
+
+Setup is captured in [`docs/ops/setup-cloudflare.md`](./ops/setup-cloudflare.md). The frontend bakes `VITE_API_URL=https://api.connactor.com` into the bundle at build time via Cloudflare Pages environment variables.
 
 ---
 
