@@ -44,8 +44,9 @@ async def test_two_hop_actor(client):
 
 
 async def test_disconnected(client):
-    # Alice (-1) and Eve (-5) are disconnected
-    response = await client.post("/solve", json={"source_id": "-1", "target_id": "-5"})
+    # Alice (-1) is in the main component; Iris (-9) lives in the isolated
+    # Solo Film component, so no path exists between them.
+    response = await client.post("/solve", json={"source_id": "-1", "target_id": "-9"})
     assert response.status_code == 404
     assert "No path exists" in response.json()["detail"]
 
@@ -194,13 +195,14 @@ async def test_neighbors_of_movie(client):
     assert response.status_code == 200
     data = response.json()
     results = data["results"]
-    assert len(results) == 3
+    assert len(results) == 4
     actor_ids = {node["id"] for node in results}
-    assert actor_ids == {"-2", "-3", "-4"}
+    assert actor_ids == {"-2", "-3", "-4", "-7"}
     # Verify descending popularity order
     assert results[0]["id"] == "-2"  # Bob (5.1)
     assert results[1]["id"] == "-3"  # Carol (4.3)
     assert results[2]["id"] == "-4"  # Dave (3.5)
+    assert results[3]["id"] == "-7"  # Grace (3.0)
 
 
 # --- Connected Endpoint Tests ---

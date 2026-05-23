@@ -220,7 +220,14 @@ GCP Persistent Disk is a separate resource from the VM — it survives VM deleti
 
 ### CI/CD
 
-GitHub Actions: run tests → build API container → push to Artifact Registry → deploy to Cloud Run. Frontend: Cloudflare Pages watches `main` and deploys automatically. Neo4j on the VM is not touched by CI/CD — updated separately via the bootstrap pipeline.
+Two GitHub Actions workflows:
+
+- **`.github/workflows/ci.yml`** — runs on every PR. `backend-test` spins up `neo4j:5-community` as a service container and runs the pytest suite against it. `frontend-build` runs `npm run build` (TypeScript + Vite) to catch type errors. Also exposed as a reusable workflow.
+- **`.github/workflows/deploy.yml`** — runs on push to `main`. Re-runs CI, then `gcloud builds submit` produces an image tagged with both `:${commit-sha}` and `:latest`, then `gcloud run services update` rolls the Cloud Run service and `gcloud run jobs update` rolls the `connactor-pipeline-full` job to the same SHA-pinned digest. SHA tags enable trivial rollback.
+
+Authentication uses Workload Identity Federation (no static JSON keys in GitHub secrets). GitHub's OIDC token is exchanged for a short-lived GCP token that impersonates the existing `connactor-api` service account. One-time setup is in [`docs/ops/setup-wif.md`](./ops/setup-wif.md).
+
+Frontend will deploy via Cloudflare Pages on `main` (see issue #13). Neo4j on the VM is not touched by CI/CD — updated separately via the bootstrap pipeline.
 
 ---
 

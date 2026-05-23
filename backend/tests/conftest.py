@@ -59,6 +59,9 @@ async def setup_test_data(neo4j_driver):
         # expert (1000 <= fame_rank < 5000)
         {"person_id": -5, "name": "Eve",    "popularity": 2.1, "rank": 2000, "fame_rank": 2000},
         {"person_id": -8, "name": "Henry",  "popularity": 1.5, "rank": 3000, "fame_rank": 3000},
+        # isolated component — rank > 5000 sits outside every difficulty bucket so /game never picks them
+        {"person_id": -9,  "name": "Iris",  "popularity": 0.5, "rank": 6000, "fame_rank": 6000},
+        {"person_id": -11, "name": "Ian",   "popularity": 0.4, "rank": 6100, "fame_rank": 6100},
     ]
     movies = [
         {"movie_id": -10, "title": "TestFilm One",   "year": 2020, "vote_count": 1000},
@@ -66,6 +69,8 @@ async def setup_test_data(neo4j_driver):
         {"movie_id": -30, "title": "TestFilm Three", "year": 2022, "vote_count": 200},
         {"movie_id": -40, "title": "TestFilm Four",  "year": 2023, "vote_count": 100},
         {"movie_id": -50, "title": "TestFilm Five",  "year": 2024, "vote_count": 50},
+        # title intentionally doesn't start with "TestFilm" so the autocomplete prefix tests aren't affected
+        {"movie_id": -60, "title": "Solo Film",      "year": 2025, "vote_count": 10},
     ]
     edges = [
         {"person_id": -1, "movie_id": -10},  # Alice (easy)
@@ -81,6 +86,8 @@ async def setup_test_data(neo4j_driver):
         {"person_id": -5, "movie_id": -40},  # Eve (expert)
         {"person_id": -8, "movie_id": -50},  # Henry (expert)
         {"person_id": -5, "movie_id": -50},  # expert pair (Eve + Henry) connected via TestFilm Five
+        {"person_id": -9,  "movie_id": -60},  # Iris (isolated)
+        {"person_id": -11, "movie_id": -60},  # Ian (isolated) — disconnected from the main component
     ]
 
     async with neo4j_driver.session() as session:
