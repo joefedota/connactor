@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """
-Connactor Bootstrap — one-command local Neo4j setup.
+Connactor pipeline orchestrator.
 
-Dev mode (default): crawls top N movies (default 1000), enriches persons, loads into Neo4j (~15 min per 1000).
-Prod mode: full dataset (~35k movies, ~4-6 hrs).
+Re-crawls TMDB for credits + movie details, enriches persons, and idempotently
+MERGEs everything into Neo4j on every run. Designed to run daily as a Cloud Run
+Job — there is no separate "delta" path; TMDB calls are cheap and our graph is
+small, so a full re-crawl is simpler and keeps vote_counts (and therefore
+fame_rank) always-fresh.
 
-All intermediate artifacts live in GCS. Neo4j must be running before calling this script.
+Dev mode: top N movies (default 1000), ~15 min per 1000.
+Prod mode: full dataset (~35k movies, ~35 min end-to-end).
+
+All intermediate artifacts live in GCS. Neo4j must be running.
 """
 from __future__ import annotations
 
@@ -24,7 +30,7 @@ sys.path.insert(0, str(_SCRIPTS_DIR.parent))
 
 import utils.gcs as gcs
 from ingest.crawl_credits import run as crawl_credits
-from ingest.crawl_delta import run as crawl_delta
+from ingest.crawl_movie_details import run as crawl_movie_details
 from ingest.crawl_persons import run as crawl_persons
 from ingest.download_movie_ids import run as download_ids
 from ingest.load_neo4j import run as load_neo4j
@@ -74,48 +80,44 @@ def main() -> None:
     parser.add_argument("--mode", choices=["dev", "prod"], default="dev")
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--skip-credits", action="store_true")
+    parser.add_argument("--skip-movie-details", action="store_true")
     parser.add_argument("--skip-persons", action="store_true")
     parser.add_argument("--dev-size", type=int, default=DEV_SAMPLE_SIZE_DEFAULT,
                         help="Number of top movies for dev mode (default: %(default)s)")
     parser.add_argument("--force-dev", action="store_true",
                         help="Rebuild the dev movie slice in GCS even if it already exists")
-    parser.add_argument("--delta", action="store_true",
-                        help="Delta refresh: only re-crawl movies changed in TMDB since yesterday "
-                             "(via /movie/changes). Skips download_ids and dev-slice steps. "
-                             "Requires --mode prod.")
     args = parser.parse_args()
 
-    if args.delta and args.mode != "prod":
-        parser.error("--delta requires --mode prod")
+    logger.info("=== Connactor pipeline (mode=%s) ===", args.mode)
 
-    logger.info("=== Connactor Bootstrap (mode=%s%s) ===", args.mode, ", delta" if args.delta else "")
+    if not args.skip_download:
+        _step("Download movie IDs", download_ids)
 
-    if args.delta:
-        movies_blob = PROD_BLOB
-        if not args.skip_credits:
-            _step("Crawl delta credits", crawl_delta)
+    if args.mode == "dev":
+        _step(
+            f"Build dev seed (top {args.dev_size})",
+            lambda: _build_dev_blob(args.dev_size, force=args.force_dev),
+        )
+        movies_blob = DEV_BLOB
     else:
-        if not args.skip_download:
-            _step("Download movie IDs", download_ids)
+        movies_blob = PROD_BLOB
 
-        if args.mode == "dev":
-            _step(
-                f"Build dev seed (top {args.dev_size})",
-                lambda: _build_dev_blob(args.dev_size, force=args.force_dev),
-            )
-            movies_blob = DEV_BLOB
-        else:
-            movies_blob = PROD_BLOB
+    # All three crawls run with force=True on daily runs so we always re-fetch from
+    # TMDB rather than resume from checkpoint. Cheap (~35 min total) and gives us
+    # always-fresh vote_counts, cast updates, and person metadata — meaning
+    # fame_rank reflects current TMDB state every morning.
+    if not args.skip_credits:
+        _step("Crawl credits", lambda: crawl_credits(movies_blob=movies_blob, force=True))
 
-        if not args.skip_credits:
-            _step("Crawl credits", lambda: crawl_credits(movies_blob=movies_blob))
+    if not args.skip_movie_details:
+        _step("Crawl movie details", lambda: crawl_movie_details(movies_blob=movies_blob, force=True))
 
     if not args.skip_persons:
         _step("Enrich persons", crawl_persons)
 
     _step("Load Neo4j", lambda: load_neo4j(movies_blob=movies_blob))
 
-    logger.info("=== Bootstrap complete (%s mode%s) ===", args.mode, ", delta" if args.delta else "")
+    logger.info("=== Pipeline complete (%s mode) ===", args.mode)
 
 
 if __name__ == "__main__":

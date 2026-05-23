@@ -34,13 +34,13 @@ from app.models import (
 MAX_GAME_ATTEMPTS = 20
 MAX_PATH_HOPS = 12
 
-# Difficulty is determined by actor popularity rank only. Each tier is a half-open
-# interval of `actor.rank` (rank 0 = most famous). Both actors in a game pair are
-# picked from the same tier — keeps the experience focused (easy = "two A-listers",
-# expert = "two niche actors") and lets us pick the pair in one indexed query with
+# Difficulty is determined by `a.fame_rank` — a 0-indexed rank where the actor's
+# fame_score is the vote_count of their 3rd-most-voted movie. Heavily skews toward
+# English-language Hollywood (TMDB vote_count comes from TMDB's mostly English-
+# speaking user base). Each tier is a half-open interval; both actors are picked
+# from the same tier so the experience is focused (easy = "two Hollywood A-listers",
+# expert = "two niche actors") and we can find the pair in one indexed query with
 # no retry-on-classification-mismatch loop.
-# TODO(fame-rank): rank is TMDB's global popularity — biases toward recently-trending
-# international actors. Switch to a fame_rank computed from movie vote_counts.
 _DIFFICULTY_RANK_RANGE: dict[Difficulty, tuple[int, int]] = {
     "easy":   (0,    50),
     "medium": (50,   200),
@@ -117,7 +117,7 @@ async def get_game(
         for _ in range(MAX_GAME_ATTEMPTS):
             result = await session.run(
                 f"""
-                MATCH (a:Actor) WHERE a.rank >= $min_rank AND a.rank < $max_rank
+                MATCH (a:Actor) WHERE a.fame_rank >= $min_rank AND a.fame_rank < $max_rank
                 WITH a ORDER BY rand() LIMIT 2
                 WITH collect(a) AS actors WHERE size(actors) = 2
                 WITH actors[0] AS source, actors[1] AS target
@@ -147,7 +147,7 @@ async def get_game(
                     label=target["name"],
                     popularity=target.get("popularity"),
                 ),
-                difficulty=_classify_difficulty(source["rank"], target["rank"]),
+                difficulty=_classify_difficulty(source["fame_rank"], target["fame_rank"]),
             )
 
     raise HTTPException(status_code=503, detail="Could not find a valid pair. Try again.")
