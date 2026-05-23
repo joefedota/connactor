@@ -35,15 +35,16 @@
 ## Phase 3 — Production Infrastructure
 **Goal:** API on Cloud Run, database server on Compute Engine, secrets in Secret Manager, automated deploys.
 
-- [ ] Enable GCP APIs (Cloud Run, Artifact Registry, Secret Manager, Compute Engine)
-- [ ] Compute Engine VM (e2-highmem-2) + 100 GB persistent disk + daily snapshot schedule
-- [ ] Docker Compose on VM for Neo4j + Redis (database server only)
-- [ ] VPC networking: Cloud Run Direct VPC Egress → VM (Neo4j :7687, Redis :6379 internal only)
-- [ ] GCP Secret Manager: create secrets, bind to Cloud Run service account via IAM
-- [ ] Containerise FastAPI (Dockerfile) + push to Artifact Registry
-- [ ] Cloud Run service: secrets mounted as env vars, VPC egress enabled
-- [ ] GitHub Actions CI/CD: test → build → push to Artifact Registry → deploy to Cloud Run
-- [ ] Cloudflare Pages for frontend + custom domain DNS
+- [x] Enable GCP APIs (Cloud Run, Artifact Registry, Secret Manager, Compute Engine)
+- [x] Compute Engine VM (e2-highmem-2) + 100 GB persistent disk + daily snapshot schedule
+- [x] Docker Compose on VM for Neo4j (Redis deferred — backlogged with #8 pair pool)
+- [x] VPC networking: Cloud Run Direct VPC Egress → VM (Neo4j :7687 internal only)
+- [x] GCP Secret Manager: create secrets, bind to Cloud Run service account via IAM
+- [x] Containerise FastAPI (Dockerfile) + push to Artifact Registry
+- [x] Cloud Run service: secrets mounted as env vars, VPC egress enabled
+- [x] Cloud Run Jobs + Cloud Scheduler: nightly full re-crawl
+- [x] GitHub Actions CI/CD: test → build → push to Artifact Registry → deploy to Cloud Run (#12)
+- [ ] Cloudflare Pages for frontend + custom domain DNS (#13)
 
 ## Phase 4 — Images + Polish
 **Goal:** Actor headshots and movie posters in the UI.

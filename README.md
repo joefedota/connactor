@@ -129,6 +129,28 @@ cd backend
 uv run pytest
 ```
 
+Tests require a running local Neo4j (started via `docker compose up -d neo4j`). The same suite runs in CI against a `neo4j:5-community` service container.
+
+---
+
+## Deployment
+
+Push to `main` triggers `.github/workflows/deploy.yml`:
+
+1. CI reruns (backend pytest against a Neo4j service container, frontend `npm run build`).
+2. `gcloud builds submit` builds the backend Docker image and tags it `:${commit-sha}` and `:latest` in Artifact Registry.
+3. The Cloud Run service `connactor-api` and the Cloud Run job `connactor-pipeline-full` are both rolled to the new SHA-pinned image.
+
+Authentication uses Workload Identity Federation — no JSON keys are stored in GitHub secrets. See [`docs/ops/setup-wif.md`](docs/ops/setup-wif.md) for one-time setup.
+
+To roll back, point either resource at a prior SHA:
+
+```bash
+gcloud run services update connactor-api \
+  --project connactor-497019 --region us-central1 \
+  --image us-central1-docker.pkg.dev/connactor-497019/connactor/api:<old-sha>
+```
+
 ---
 
 ## Project Structure

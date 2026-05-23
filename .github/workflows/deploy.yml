@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: connactor-497019
+      REGION: us-central1
+      IMAGE_REPO: us-central1-docker.pkg.dev/connactor-497019/connactor/api
+      SERVICE_NAME: connactor-api
+      PIPELINE_JOB: connactor-pipeline-full
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github/providers/github
+          service_account: connactor-api@connactor-497019.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build & push image
+        working-directory: backend
+        run: |
+          gcloud builds submit \
+            --project "$PROJECT_ID" \
+            --tag "$IMAGE_REPO:${{ github.sha }}" .
+          gcloud artifacts docker tags add \
+            "$IMAGE_REPO:${{ github.sha }}" "$IMAGE_REPO:latest"
+
+      - name: Roll service to new image
+        run: |
+          gcloud run services update "$SERVICE_NAME" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE_REPO:${{ github.sha }}"
+
+      - name: Roll pipeline job to new image
+        run: |
+          gcloud run jobs update "$PIPELINE_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE_REPO:${{ github.sha }}"
