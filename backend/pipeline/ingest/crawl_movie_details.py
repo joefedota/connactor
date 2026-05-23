@@ -4,12 +4,14 @@ TMDb Async Movie Details Crawler (Issue #29)
 
 Crawls `/movie/{id}` for every qualifying movie ID to populate fields that aren't
 in the daily ID export — vote_count, vote_average, year (from release_date),
-runtime, original_language.
+runtime, original_language, collection_id.
 
 Same patterns as crawl_credits.py: AsyncTokenBucket + Semaphore for rate limiting,
 GCS checkpoint/resume, append-only JSONL output.
 
-Output rows: {movie_id, vote_count, vote_average, year, runtime, original_language}
+Output rows: {movie_id, vote_count, vote_average, year, runtime, original_language, collection_id}
+collection_id comes from TMDB's `belongs_to_collection` (null for standalone films) and lets
+the fame_rank computation collapse franchise entries (3 LOTR films → 1 effective film).
 """
 from __future__ import annotations
 
@@ -91,6 +93,7 @@ async def _crawl_one_details(
             logger.warning("Movie %d: unexpected status %d", movie_id, response.status_code)
             return False
         body = response.json()
+        collection = body.get("belongs_to_collection")
         output_fd.write(json.dumps({
             "movie_id": movie_id,
             "vote_count": body.get("vote_count"),
@@ -98,6 +101,7 @@ async def _crawl_one_details(
             "year": _parse_year(body.get("release_date")),
             "runtime": body.get("runtime"),
             "original_language": body.get("original_language"),
+            "collection_id": collection.get("id") if collection else None,
         }) + "\n")
         output_fd.flush()
         return True

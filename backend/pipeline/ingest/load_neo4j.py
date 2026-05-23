@@ -99,6 +99,7 @@ async def _load_movies(session, movies: list[dict], details: dict[int, dict]) ->
             "vote_average": d.get("vote_average"),
             "runtime": d.get("runtime"),
             "original_language": d.get("original_language"),
+            "collection_id": d.get("collection_id"),
         })
     for i in tqdm(range(0, len(rows), MOVIE_BATCH), desc="Movie nodes", unit="batch"):
         await session.run(
@@ -111,7 +112,8 @@ async def _load_movies(session, movies: list[dict], details: dict[int, dict]) ->
                 m.vote_count = row.vote_count,
                 m.vote_average = row.vote_average,
                 m.runtime = row.runtime,
-                m.original_language = row.original_language
+                m.original_language = row.original_language,
+                m.collection_id = row.collection_id
             """,
             rows=rows[i : i + MOVIE_BATCH],
         )
@@ -134,39 +136,70 @@ async def _load_edges(session, credits: list[dict]) -> None:
 
 async def _compute_fame_rank(session) -> None:
     """
-    fame_score = vote_count of the actor's 3rd-most-voted movie. Heavily skews toward
-    English-language Hollywood because TMDB vote_count comes from TMDB's mostly
-    English-speaking user base — the K-drama-popular-but-Western-unknown bias of
-    `a.rank` (TMDB global popularity) goes away.
+    Composite fame_score from three signals:
 
-    Robust to one-hit wonders — needs at least three reasonably-voted films to score
-    high. Actors with <3 movies fall back to their lowest available vote_count
-    (or 0 if they have none).
+    - strength: median of the top-5 collapsed group scores. Movies are first
+      weighted by billing order (1.0 for top-3 billed, 0.5 for 4-9, 0.2 for 10+)
+      and then grouped by belongs_to_collection (franchise dedup — 3 LOTR films
+      count once). For each group we keep max(weighted_vote_count). Movies with
+      no collection_id are each their own group.
+    - popularity: TMDB's daily-updated popularity score for the actor. Captures
+      "is this person culturally present right now," which raw vote_count of
+      decade-old films doesn't.
+    - lead_count: count of top-5 groups where the actor was top-3 billed AND the
+      group's highest-voted movie has vote_count > 1000. Bonus for actually
+      leading films, not just appearing in them.
 
-    fame_rank = 0-indexed rank by fame_score DESC. Same shape as a.rank so the
-    /game tier bucketing keeps working.
+    fame_score = log(1+strength)*1.0 + log(1+popularity)*1.0 + log(1+lead_count)*1.0
+
+    Log-scaling keeps any one signal from dominating (vote_counts range 0→200k+;
+    popularity 0→100; lead_count 0→5). Popularity weight was tuned down from 1.5 to
+    1.0 after a preview showed actors with TMDB popularity spikes (e.g. John Hannah
+    at p=42) crashing into the top 10. 1.0 keeps the signal meaningful without
+    letting spikes dominate.
+
+    fame_rank = 0-indexed by (fame_score DESC, popularity DESC, person_id ASC).
+    Same shape as before so /game tier bucketing keeps working.
     """
-    logger.info("Computing fame_score for each actor ...")
-    # Subquery (CALL { WITH a; MATCH ... ORDER BY ... }) lets each actor's
-    # vote_counts be sorted independently before collecting.
+    logger.info("Computing composite fame_score for each actor ...")
     await session.run(
         """
         MATCH (a:Actor)
         CALL {
             WITH a
-            MATCH (a)-[:APPEARED_IN]->(m:Movie)
+            MATCH (a)-[r:APPEARED_IN]->(m:Movie)
             WHERE m.vote_count IS NOT NULL
-            WITH m.vote_count AS vc
-            ORDER BY vc DESC
-            RETURN collect(vc) AS sorted_desc
+            // Per-movie weighted vote_count (billing weight).
+            WITH r, m,
+                 m.vote_count *
+                 CASE
+                     WHEN r.order < 3  THEN 1.0
+                     WHEN r.order < 10 THEN 0.5
+                     ELSE 0.2
+                 END AS weighted,
+                 coalesce(m.collection_id, m.movie_id) AS group_key
+            // Collapse by collection — one row per franchise (or per standalone movie).
+            WITH group_key,
+                 max(weighted) AS group_score,
+                 min(r.order) AS group_min_order,
+                 max(m.vote_count) AS group_max_votes
+            ORDER BY group_score DESC
+            RETURN collect({score: group_score, order: group_min_order, votes: group_max_votes}) AS groups
         }
-        WITH a,
+        WITH a, groups[0..5] AS top5
+        WITH a, top5,
              CASE
-               WHEN size(sorted_desc) >= 3 THEN sorted_desc[2]
-               WHEN size(sorted_desc) > 0  THEN sorted_desc[size(sorted_desc) - 1]
-               ELSE 0
-             END AS fame_score
-        SET a.fame_score = fame_score
+                 WHEN size(top5) >= 5 THEN top5[2].score
+                 WHEN size(top5) >= 3 THEN top5[size(top5) / 2].score
+                 WHEN size(top5) > 0  THEN top5[size(top5) - 1].score
+                 ELSE 0
+             END AS strength,
+             size([g IN top5 WHERE g.order < 3 AND g.votes > 1000]) AS lead_count
+        SET a.strength_score = strength,
+            a.lead_count = lead_count,
+            a.fame_score = log(1 + strength) * 1.0
+                         + log(1 + coalesce(a.popularity, 0)) * 1.0
+                         + log(1 + lead_count) * 1.0
         """
     )
 
