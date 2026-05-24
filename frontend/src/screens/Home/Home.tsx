@@ -106,7 +106,7 @@ export function Home() {
           onClick={handleStart}
           disabled={isLoading}
         >
-          {isLoading ? 'Loading Game…' : 'Random Game'}
+          {isLoading ? 'Loading Game…' : 'New Game'}
         </button>
 
         <button
