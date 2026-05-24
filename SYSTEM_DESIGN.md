@@ -236,6 +236,16 @@ Frontend deploys via Cloudflare Pages on push to `main` (separate from the GitHu
 
 Setup is captured in [`docs/ops/setup-cloudflare.md`](./ops/setup-cloudflare.md). The frontend bakes `VITE_API_URL=https://api.connactor.com` into the bundle at build time via Cloudflare Pages environment variables.
 
+### Cost + usage monitoring
+
+A weekly Cloud Run Job (`connactor-cost-report`, triggered Monday 14:00 UTC by Cloud Scheduler) builds a single HTML email summarising the prior 7 days vs the week before. Three data sources, one Resend POST:
+
+- **GCP cost** — BigQuery query against the detailed billing export (`connactor-497019.billing_export.gcp_billing_export_resource_v1_*`). Net of credits, grouped by service.
+- **Cloudflare cost** — `GET /accounts/{id}/subscriptions`, summed and prorated to a weekly equivalent.
+- **Usage** — Cloudflare GraphQL Analytics API (`httpRequests1dGroups`) for daily uniques + pageviews. Cumulative since launch is a separate query from `LAUNCH_DATE` (2026-05-23). No app instrumentation — Cloudflare collects at the edge.
+
+Anything >25% WoW (cost ↑ or visitors ↓) gets visually flagged. Reuses the existing job/scheduler/SA pattern from the data pipeline — no new infra class. Setup runbook: [`docs/ops/setup-cost-report.md`](./ops/setup-cost-report.md).
+
 ---
 
 ## Migration Path

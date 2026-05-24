@@ -77,3 +77,8 @@
 - [ ] `/daily` endpoint returning today's pair
 - [ ] Share result with date stamp
 - [ ] Historical results page
+
+## Phase 8 — Ops & Observability
+**Goal:** Don't get surprised by spend or by traffic going to zero.
+
+- [x] Weekly cost + usage email (GCP BigQuery billing export + Cloudflare Web Analytics + Resend) — issue #47

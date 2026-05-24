@@ -20,5 +20,15 @@ class Settings(BaseSettings):
     gcs_bucket: str = "connactor-data"
     gcp_project: str = "connactor-497019"
 
+    # Cost + usage report (scripts/cost_report.py)
+    billing_dataset: str = "billing_export"
+    billing_table: str = "gcp_billing_export_resource_v1_017EE0_4F04E9_9FCF85"
+    cloudflare_api_token: str = ""
+    cloudflare_account_id: str = ""
+    cloudflare_zone_tag: str = ""
+    resend_api_key: str = ""
+    report_recipient: str = "joefedota@gmail.com"
+    report_sender: str = "reports@connactor.com"
+
 
 settings = Settings()
