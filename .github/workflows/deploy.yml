@@ -21,6 +21,7 @@ jobs:
       IMAGE_REPO: us-central1-docker.pkg.dev/connactor-497019/connactor/api
       SERVICE_NAME: connactor-api
       PIPELINE_JOB: connactor-pipeline-full
+      COST_REPORT_JOB: connactor-cost-report
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +60,13 @@ jobs:
       - name: Roll pipeline job to new image
         run: |
           gcloud run jobs update "$PIPELINE_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE_REPO:${{ github.sha }}"
+
+      - name: Roll cost-report job to new image
+        run: |
+          gcloud run jobs update "$COST_REPORT_JOB" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --image "$IMAGE_REPO:${{ github.sha }}"
