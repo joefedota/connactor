@@ -18,7 +18,6 @@ data/processed/
 # Local dev / debug only
 tests/
 bin/
-scripts/
 .env
 
 .DS_Store
