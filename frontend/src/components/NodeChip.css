@@ -73,7 +73,6 @@
   display: block;
   user-select: none;
   -webkit-user-drag: none;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.28));
 }
 
 .node-chip__photo--actor img {
