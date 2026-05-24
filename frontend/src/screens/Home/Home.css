@@ -216,7 +216,6 @@
   background: var(--color-accent, #FF00B2);
   border-color: var(--color-accent, #FF00B2);
   color: var(--color-on-accent, #fff);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
 
 .difficulty-info-card {
