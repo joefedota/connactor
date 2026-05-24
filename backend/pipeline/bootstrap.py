@@ -91,7 +91,9 @@ def main() -> None:
     logger.info("=== Connactor pipeline (mode=%s) ===", args.mode)
 
     if not args.skip_download:
-        _step("Download movie IDs", download_ids)
+        # force=True so threshold changes / freshly-added TMDB titles pick up on
+        # every run. Download is cheap (one ~60 MB gz file) — no reason to cache.
+        _step("Download movie IDs", lambda: download_ids(force=True))
 
     if args.mode == "dev":
         _step(

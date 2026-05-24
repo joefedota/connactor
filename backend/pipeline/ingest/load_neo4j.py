@@ -83,19 +83,50 @@ async def _load_actors(session, persons: list[dict]) -> None:
         )
 
 
+VOTE_COUNT_THRESHOLD = 100
+NEW_MOVIE_POPULARITY_GRACE = 1.0
+
+
+def _should_load_movie(vote_count: int | None, popularity: float | None) -> bool:
+    """
+    Gate Movie nodes by vote_count, with a popularity-based grace window for
+    brand-new movies that haven't accumulated votes yet.
+
+    Why: TMDB's `popularity` decays daily, so it's a bad long-term filter
+    (e.g. The Internship (2013) has popularity 0.20 but 4,471 votes — clearly
+    real). `vote_count` is the stable signal of "people have heard of this".
+
+    Returns True for:
+      - vote_count > VOTE_COUNT_THRESHOLD (regardless of popularity), OR
+      - vote_count is None AND popularity > NEW_MOVIE_POPULARITY_GRACE
+        (new release that hasn't accumulated votes yet)
+    """
+    if vote_count is not None and vote_count > VOTE_COUNT_THRESHOLD:
+        return True
+    if vote_count is None and (popularity or 0.0) > NEW_MOVIE_POPULARITY_GRACE:
+        return True
+    return False
+
+
 async def _load_movies(session, movies: list[dict], details: dict[int, dict]) -> None:
-    logger.info("Loading %d Movie nodes ...", len(movies))
     # `movies` comes from the daily ID export (id + popularity only); `details` is the
-    # per-movie /movie/{id} crawl that fills in vote_count, year, etc. We join on id.
+    # per-movie /movie/{id} crawl that fills in vote_count, year, etc. We join on id
+    # and filter via _should_load_movie before MERGE.
     rows = []
+    dropped = 0
     for m in movies:
         d = details.get(m["id"], {})
+        vote_count = d.get("vote_count")
+        popularity = m.get("popularity")
+        if not _should_load_movie(vote_count, popularity):
+            dropped += 1
+            continue
         rows.append({
             "movie_id": m["id"],
             "title": m["title"],
-            "popularity": m.get("popularity"),
+            "popularity": popularity,
             "year": d.get("year"),
-            "vote_count": d.get("vote_count"),
+            "vote_count": vote_count,
             "vote_average": d.get("vote_average"),
             "runtime": d.get("runtime"),
             "original_language": d.get("original_language"),
@@ -103,6 +134,10 @@ async def _load_movies(session, movies: list[dict], details: dict[int, dict]) ->
             "poster_path": d.get("poster_path"),
             "genre_ids": d.get("genre_ids", []),
         })
+    logger.info(
+        "Loading %d Movie nodes (dropped %d below vote_count=%d threshold).",
+        len(rows), dropped, VOTE_COUNT_THRESHOLD,
+    )
     for i in tqdm(range(0, len(rows), MOVIE_BATCH), desc="Movie nodes", unit="batch"):
         await session.run(
             """
