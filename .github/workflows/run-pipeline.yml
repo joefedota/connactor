@@ -1,0 +1,44 @@
+name: Run Pipeline (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Pipeline mode'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+          - dev
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_ID: connactor-497019
+      REGION: us-central1
+      PIPELINE_JOB: connactor-pipeline-full
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/${{ vars.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github/providers/github
+          service_account: connactor-api@connactor-497019.iam.gserviceaccount.com
+          token_format: access_token
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Execute pipeline job
+        run: |
+          gcloud run jobs execute "$PIPELINE_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --args="--mode,${{ github.event.inputs.mode }}" \
+            --wait
