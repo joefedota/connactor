@@ -100,7 +100,7 @@ gcloud run jobs create connactor-cost-report \
 
 No VPC egress flags needed — this job hits public APIs only (BigQuery, Cloudflare, Resend).
 
-## Schedule daily (14:00 UTC = 9am Eastern / 6am Pacific)
+## Schedule daily (14:00 UTC = 10am Eastern / 7am Pacific during DST; 9am ET / 6am PT in winter)
 
 ```bash
 gcloud run jobs add-iam-policy-binding connactor-cost-report \
