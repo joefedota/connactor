@@ -8,10 +8,11 @@ interface Props {
   removable?: boolean;
   onRemove?: () => void;
   faded?: boolean;
+  noPhoto?: boolean;  // suppress hover/tap reveal — used for path chain chips
 }
 
-export function NodeChip({ node, removable, onRemove, faded }: Props) {
-  const imageUrl = tmdbImage(node.image_path);
+export function NodeChip({ node, removable, onRemove, faded, noPhoto }: Props) {
+  const imageUrl = noPhoto ? null : tmdbImage(node.image_path);
   const peekable = !!imageUrl;
 
   const [hovered, setHovered] = useState(false);

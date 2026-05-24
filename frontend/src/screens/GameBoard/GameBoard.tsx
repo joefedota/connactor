@@ -115,6 +115,7 @@ export function GameBoard() {
                   node={node}
                   removable={i === intermediateNodes.length - 1}
                   onRemove={removeLastFromPath}
+                  noPhoto
                 />
               </div>
             ))}
