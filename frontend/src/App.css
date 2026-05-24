@@ -26,8 +26,8 @@
 
 .btn--ghost {
   background: transparent;
-  color: var(--color-accent, #ffffff);
-  border: 1.5px solid var(--color-accent, #ffffff);
+  color: #444444;
+  border: 1.5px solid #cccccc;
 }
 
 .btn--ghost:hover:not(:disabled) { opacity: 0.8; }
