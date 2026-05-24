@@ -100,7 +100,7 @@ export function GameBoard() {
             className={canClickTarget ? 'game-board__target--clickable' : ''}
             onClick={handleTargetClick}
           >
-            <NodeChip node={target} />
+            <NodeChip node={target} noPhoto={canClickTarget} />
           </div>
         </div>
       </div>
@@ -137,7 +137,7 @@ export function GameBoard() {
           <div className="game-board__finish-row">
             <span className="game-board__finish-label">or finish:</span>
             <div onClick={handleTargetClick} style={{ cursor: 'pointer' }}>
-              <NodeChip node={target} />
+              <NodeChip node={target} noPhoto />
             </div>
           </div>
         )}
