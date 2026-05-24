@@ -213,9 +213,9 @@
 }
 
 .difficulty-tab.is-active {
-  background: var(--color-accent, #FF00B2);
-  border-color: var(--color-accent, #FF00B2);
-  color: var(--color-on-accent, #fff);
+  background: transparent;
+  border-color: #333333;
+  color: #333333;
 }
 
 .difficulty-info-card {
