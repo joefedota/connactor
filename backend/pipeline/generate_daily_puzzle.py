@@ -33,8 +33,6 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 50
-MIN_HOPS = 3
-MAX_HOPS = 5
 FAME_RANK_MIN = 50
 FAME_RANK_MAX = 200
 
@@ -44,15 +42,13 @@ async def pick_pair(driver) -> tuple[int, int, int] | None:
     for _ in range(MAX_ATTEMPTS):
         async with driver.session() as session:
             result = await session.run(
-                f"""
+                """
                 MATCH (a:Actor) WHERE a.fame_rank >= $min_rank AND a.fame_rank < $max_rank
                 WITH a ORDER BY rand() LIMIT 2
                 WITH collect(a) AS actors WHERE size(actors) = 2
                 WITH actors[0] AS source, actors[1] AS target
                 MATCH p = shortestPath((source)-[:APPEARED_IN*..12]-(target))
-                WITH source, target, length(p) AS hops
-                WHERE hops >= {MIN_HOPS} AND hops <= {MAX_HOPS}
-                RETURN source.person_id AS src, target.person_id AS tgt, hops
+                RETURN source.person_id AS src, target.person_id AS tgt, length(p) AS hops
                 """,
                 min_rank=FAME_RANK_MIN,
                 max_rank=FAME_RANK_MAX,
