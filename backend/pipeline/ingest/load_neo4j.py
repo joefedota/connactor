@@ -100,6 +100,7 @@ async def _load_movies(session, movies: list[dict], details: dict[int, dict]) ->
             "runtime": d.get("runtime"),
             "original_language": d.get("original_language"),
             "collection_id": d.get("collection_id"),
+            "poster_path": d.get("poster_path"),
         })
     for i in tqdm(range(0, len(rows), MOVIE_BATCH), desc="Movie nodes", unit="batch"):
         await session.run(
@@ -113,7 +114,8 @@ async def _load_movies(session, movies: list[dict], details: dict[int, dict]) ->
                 m.vote_average = row.vote_average,
                 m.runtime = row.runtime,
                 m.original_language = row.original_language,
-                m.collection_id = row.collection_id
+                m.collection_id = row.collection_id,
+                m.poster_path = row.poster_path
             """,
             rows=rows[i : i + MOVIE_BATCH],
         )

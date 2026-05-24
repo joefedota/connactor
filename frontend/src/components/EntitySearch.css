@@ -60,6 +60,7 @@
 }
 
 .entity-search__option {
+  position: relative;
   padding: 10px 16px;
   cursor: pointer;
   font-size: 15px;
@@ -78,4 +79,43 @@
   font-size: 12px;
   color: #888888;
   font-variant-numeric: tabular-nums;
+}
+
+/* Active-option photo popover (hover or keyboard nav). Pops out to the
+   right of the dropdown so it doesn't shift the option layout. Hidden on
+   narrow screens where there's no room to pop out. */
+.entity-search__option-photo {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 8px;
+  padding: 4px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  z-index: 101;
+  pointer-events: none;
+}
+
+.entity-search__option-photo img {
+  display: block;
+}
+
+.entity-search__option-photo--actor img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.entity-search__option-photo--movie img {
+  width: 60px;
+  height: auto;
+  border-radius: 4px;
+}
+
+@media (max-width: 640px) {
+  .entity-search__option-photo {
+    display: none;
+  }
 }

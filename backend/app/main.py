@@ -162,12 +162,14 @@ async def get_game(
                     id=str(source["person_id"]),
                     label=source["name"],
                     popularity=source.get("popularity"),
+                    image_path=source.get("profile_path"),
                 ),
                 target=NodeInfo(
                     type="actor",
                     id=str(target["person_id"]),
                     label=target["name"],
                     popularity=target.get("popularity"),
+                    image_path=target.get("profile_path"),
                 ),
                 difficulty=_classify_difficulty(source["fame_rank"], target["fame_rank"]),
             )
@@ -253,7 +255,7 @@ async def post_solve(request: Request, body: SolveRequest):
     if body.source_id == body.target_id:
         async with driver.session() as session:
             result = await session.run(
-                "MATCH (a:Actor {person_id: $id}) RETURN a.name AS name, a.popularity AS popularity",
+                "MATCH (a:Actor {person_id: $id}) RETURN a.name AS name, a.popularity AS popularity, a.profile_path AS profile_path",
                 id=int(body.source_id),
             )
             record = await result.single()
@@ -264,6 +266,7 @@ async def post_solve(request: Request, body: SolveRequest):
             id=body.source_id,
             label=record["name"],
             popularity=record.get("popularity"),
+            image_path=record.get("profile_path"),
         )
         return SolveResponse(hop_count=0, paths=[[node]])
 
@@ -274,8 +277,8 @@ async def post_solve(request: Request, body: SolveRequest):
                 (a1:Actor {person_id: $source})-[:APPEARED_IN*..12]-(a2:Actor {person_id: $target})
             )
             RETURN [n IN nodes(p) | CASE labels(n)[0]
-                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity}
-                WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year)}
+                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path}
+                WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
             END] AS path,
             length(p) AS hops
             LIMIT 10
@@ -317,7 +320,7 @@ async def get_autocomplete(
                     CALL db.index.fulltext.queryNodes('actorNames', $search)
                     YIELD node, score
                     RETURN node.person_id AS id, node.name AS label,
-                           node.popularity AS popularity, node.profile_path AS profile_path
+                           node.popularity AS popularity, node.profile_path AS image_path
                     ORDER BY score DESC, node.popularity DESC
                     LIMIT $limit
                     """,
@@ -330,7 +333,8 @@ async def get_autocomplete(
                     CALL db.index.fulltext.queryNodes('movieTitles', $search)
                     YIELD node, score
                     RETURN node.movie_id AS id, node.title AS label,
-                           node.year AS year, node.vote_count AS vote_count
+                           node.year AS year, node.vote_count AS vote_count,
+                           node.poster_path AS image_path
                     ORDER BY score DESC, node.vote_count DESC
                     LIMIT $limit
                     """,
@@ -351,6 +355,7 @@ async def get_autocomplete(
                 id=str(rec["id"]),
                 label=rec["label"],
                 popularity=rec.get("popularity"),
+                image_path=rec.get("image_path"),
             ))
         else:
             results.append(NodeInfo(
@@ -358,6 +363,7 @@ async def get_autocomplete(
                 id=str(rec["id"]),
                 label=rec["label"],
                 year=str(rec["year"]) if rec.get("year") else None,
+                image_path=rec.get("image_path"),
             ))
 
     return AutocompleteResponse(results=results)
@@ -379,7 +385,8 @@ async def get_autocomplete_neighbors(
             cypher = """
                 MATCH (m:Movie {movie_id: $node_id})<-[:APPEARED_IN]-(a:Actor)
                 WHERE $q = '' OR toLower(a.name) CONTAINS toLower($q)
-                RETURN a.person_id AS id, a.name AS label, a.popularity AS popularity
+                RETURN a.person_id AS id, a.name AS label, a.popularity AS popularity,
+                       a.profile_path AS image_path
                 ORDER BY a.popularity DESC
                 LIMIT $limit
             """
@@ -388,7 +395,8 @@ async def get_autocomplete_neighbors(
             cypher = """
                 MATCH (a:Actor {person_id: $node_id})-[:APPEARED_IN]->(m:Movie)
                 WHERE $q = '' OR toLower(m.title) CONTAINS toLower($q)
-                RETURN m.movie_id AS id, m.title AS label, m.year AS year, m.vote_count AS vote_count
+                RETURN m.movie_id AS id, m.title AS label, m.year AS year, m.vote_count AS vote_count,
+                       m.poster_path AS image_path
                 ORDER BY m.vote_count DESC
                 LIMIT $limit
             """
@@ -403,6 +411,7 @@ async def get_autocomplete_neighbors(
                 id=str(rec["id"]),
                 label=rec["label"],
                 popularity=rec.get("popularity"),
+                image_path=rec.get("image_path"),
             ))
         else:
             results.append(NodeInfo(
@@ -410,6 +419,7 @@ async def get_autocomplete_neighbors(
                 id=str(rec["id"]),
                 label=rec["label"],
                 year=str(rec["year"]) if rec.get("year") else None,
+                image_path=rec.get("image_path"),
             ))
 
     return AutocompleteResponse(results=results)

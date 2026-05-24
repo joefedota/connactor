@@ -14,6 +14,9 @@ class NodeInfo(BaseModel):
     label: str           # actor name or movie title
     year: Optional[str] = None          # movies only
     popularity: Optional[float] = None  # actors only
+    # TMDB image path: `profile_path` for actors, `poster_path` for movies. Frontend
+    # prepends `https://image.tmdb.org/t/p/{size}` to construct the final URL.
+    image_path: Optional[str] = None
 
 
 class GameResponse(BaseModel):

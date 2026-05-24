@@ -4,6 +4,7 @@ export interface NodeInfo {
   label: string;  // actor name or movie title
   year?: string;  // movies only
   popularity?: number; // actors only
+  image_path?: string | null; // TMDB profile_path / poster_path; prepend tmdbImage()
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';

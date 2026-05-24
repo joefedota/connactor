@@ -49,10 +49,10 @@
 ## Phase 4 — Images + Polish
 **Goal:** Actor headshots and movie posters in the UI.
 
-- [ ] Surface `profile_path` / `poster_path` in API responses
-- [ ] Add actor thumbnail to `NodeChip` component
-- [ ] Add movie poster to `NodeChip` component
-- [ ] Handle missing images gracefully
+- [x] Surface `profile_path` / `poster_path` in API responses (#37)
+- [x] Add actor thumbnail to `NodeChip` component (#37)
+- [x] Add movie poster to `NodeChip` component (#37)
+- [x] Handle missing images gracefully (#37)
 
 ## Phase 5 — Franchise Blocklist (v1.5)
 **Goal:** Filter large ensemble franchises that trivialize the graph.
