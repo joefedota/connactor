@@ -106,7 +106,7 @@ export function GameBoard() {
       </div>
 
       <div className="game-board__photo-tip">
-        Don't recognize them? Hover an actor to peek at their photo — tap on mobile.
+        Tap an actor to see their headshot
       </div>
 
       {intermediateNodes.length > 0 && (
