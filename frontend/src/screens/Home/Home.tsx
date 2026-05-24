@@ -102,18 +102,18 @@ export function Home() {
         </div>
 
         <button
-          className="btn btn--daily btn--large"
-          onClick={() => navigate('/daily')}
-        >
-          Daily Challenge
-        </button>
-
-        <button
           className="btn btn--primary btn--large"
           onClick={handleStart}
           disabled={isLoading}
         >
           {isLoading ? 'Loading Game…' : 'Random Game'}
+        </button>
+
+        <button
+          className="btn btn--daily btn--large"
+          onClick={() => navigate('/daily')}
+        >
+          Daily Challenge
         </button>
 
         <button
