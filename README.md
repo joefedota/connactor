@@ -163,7 +163,17 @@ Both should be running at the same time for the full experience.
 
 ## Daily Challenge (local testing)
 
-Generate today's puzzle manually (the production job runs at 06:00 UTC):
+Generate today's puzzle using the wrapper script (dev targets local Postgres, prod targets Neon):
+
+```bash
+# Local dev (default)
+backend/bin/generate-daily-puzzle.sh dev --date $(date +%Y-%m-%d)
+
+# Production Neon database
+backend/bin/generate-daily-puzzle.sh prod --date $(date +%Y-%m-%d)
+```
+
+Or run the Python script directly against the local database:
 
 ```bash
 cd backend
@@ -171,6 +181,8 @@ uv run python pipeline/generate_daily_puzzle.py --date $(date +%Y-%m-%d)
 ```
 
 Then visit http://localhost:5173/daily.
+
+In production, `connactor-daily-puzzle` (Cloud Run Job) runs automatically at 06:00 UTC each night. See [`docs/ops/setup-daily-puzzle-job.md`](docs/ops/setup-daily-puzzle-job.md) for setup.
 
 ---
 
@@ -195,13 +207,19 @@ Push to `main` triggers `.github/workflows/deploy.yml`:
 
 Authentication uses Workload Identity Federation — no JSON keys are stored in GitHub secrets. See [`docs/ops/setup-wif.md`](docs/ops/setup-wif.md) for one-time setup.
 
-**Applying migrations to production (Neon):**
+**Applying migrations:**
+
+Use the wrapper script — it selects the right database automatically:
 
 ```bash
-DATABASE_URL="postgresql+asyncpg://<neon-url>?ssl=require" uv run alembic upgrade head
+# Local Postgres (test first)
+backend/bin/migrate.sh dev
+
+# Neon (production) — fetches DATABASE_URL from Secret Manager
+backend/bin/migrate.sh prod
 ```
 
-Only run this after verifying the migration works locally.
+Always verify the migration works locally before running against prod.
 
 To roll back the API:
 

@@ -264,7 +264,7 @@ GCP Persistent Disk is a separate resource from the VM — it survives VM deleti
 Two GitHub Actions workflows:
 
 - **`.github/workflows/ci.yml`** — runs on every PR. `backend-test` spins up `neo4j:5-community` as a service container and runs the pytest suite against it. `frontend-build` runs `npm run build` (TypeScript + Vite) to catch type errors. Also exposed as a reusable workflow.
-- **`.github/workflows/deploy.yml`** — runs on push to `main`. Re-runs CI, then `gcloud builds submit` produces an image tagged with both `:${commit-sha}` and `:latest`, then `gcloud run services update` rolls the Cloud Run service and `gcloud run jobs update` rolls the `connactor-pipeline-full` job to the same SHA-pinned digest. SHA tags enable trivial rollback.
+- **`.github/workflows/deploy.yml`** — runs on push to `main`. Re-runs CI, then `gcloud builds submit` produces an image tagged with both `:${commit-sha}` and `:latest`, then `gcloud run services update` rolls the Cloud Run service and `gcloud run jobs update` rolls the `connactor-pipeline-full`, `connactor-cost-report`, and `connactor-daily-puzzle` jobs to the same SHA-pinned digest. SHA tags enable trivial rollback.
 
 Authentication uses Workload Identity Federation (no static JSON keys in GitHub secrets). GitHub's OIDC token is exchanged for a short-lived GCP token that impersonates the existing `connactor-api` service account. One-time setup is in [`docs/ops/setup-wif.md`](./ops/setup-wif.md).
 
@@ -278,6 +278,8 @@ Frontend deploys via Cloudflare Pages on push to `main` (separate from the GitHu
 Setup is captured in [`docs/ops/setup-cloudflare.md`](./ops/setup-cloudflare.md). The frontend bakes `VITE_API_URL=https://api.connactor.com` into the bundle at build time via Cloudflare Pages environment variables.
 
 ### Cost + usage monitoring
+
+A separate Cloud Run Job (`connactor-daily-puzzle`, triggered every day at 06:00 UTC) runs `pipeline/generate_daily_puzzle.py`. It picks two random actors from the medium fame tier (`fame_rank` 50–200), verifies a path exists between them, and upserts the pair into the `puzzles` table with `is_daily=TRUE` and `scheduled_date = tomorrow (UTC)`. The job is idempotent — if tomorrow's puzzle already exists it skips silently. Setup runbook: [`docs/ops/setup-daily-puzzle-job.md`](./ops/setup-daily-puzzle-job.md).
 
 A daily Cloud Run Job (`connactor-cost-report`, triggered every day at 14:00 UTC by Cloud Scheduler) builds a single HTML email summarising the rolling 7-day window vs the week before. Three data sources, one Resend POST:
 
