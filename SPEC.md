@@ -54,6 +54,11 @@ TMDB API (themoviedb.org) — free API key, full cast lists per film, daily expo
 - Cast members with `known_for_department = Acting` only
 - Actors with ≥ 5 qualifying movie credits
 
+### Optimal path filters (applied at solve time)
+- Movies with `vote_count < 100` are excluded from optimal paths (removes tributes, TV specials, obscure entries)
+- Movies with TMDB genre ID 99 (Documentary) are excluded from optimal paths
+- `genre_ids` is stored on Movie nodes from TMDB `/movie/{id}` response; requires pipeline re-run to populate on existing nodes
+
 ### Starting actor pool filter (applied at pair generation time)
 - Starting actors are the top N actors ranked by **TMDB popularity score**
 - Pool size varies by difficulty tier (see Difficulty Tiers below)
@@ -156,4 +161,5 @@ Candidates to keep:
 | 12 | Autocomplete shows release year for movies | Disambiguates remakes and multiple versions of the same title in the dropdown (e.g. two "La La Land" entries). Year stored on movie nodes at ingest and surfaced in all NodeInfo responses. |
 | 13 | Switch data source from IMDB to TMDB | IMDB free TSV dumps only include principal cast (~10–15 per film). TMDB's `/movie/{id}/credits` returns all credited cast (50–200+ for popular films), giving the graph significantly more edges and gameplay paths. TMDB offers a free API key and a daily movie ID export file.<br><br>**Validation Findings (Phase 0 - May 2026):**<br>- **Cast Coverage**: Verification script `validate_tmdb.py` demonstrated a **300% to 1200% edge count increase** over the current IMDB-principals graph. Popular films expanded from 10 principals to 50–150+ actors (including niche voice actors and cameos like Paul Bettany in *Iron Man*).<br>- **Daily Exports**: Confirmed daily unauthenticated NDJSON gzipped export downloads from `files.tmdb.org` work flawlessly, yielding ~1.2M rows that filter down to ~35,486 high-quality films when popularity > 1.0.<br>- **Changes Endpoint**: Confirmed `/movie/changes` returns ~1,000–5,000 daily modified IDs, proving the feasibility of lightweight incremental updates. |
 | 14 | Switch from NetworkX in-memory to Neo4j graph DB | Removes 1–2 GB RAM requirement, eliminates 15–30s cold start, enables horizontal scaling, and gives native Cypher `shortestPath` / `allShortestPaths` instead of custom BFS. Neo4j Community Edition is free; self-hosted on GCP at ~$75/mo vs $650–975/mo for managed AuraDB. |
+| 16 | Exclude low-vote and documentary movies from optimal paths | Tribute films, TV specials, and documentaries appeared in optimal paths due to shared cast. Filter at solve time (`vote_count >= 100`, `genre_id != 99`) rather than ingest time so the full graph remains available for player autocomplete. `genre_ids` added to Movie nodes in pipeline. |
 | 15 | Self-hosted Neo4j on GCP VM, not AuraDB managed | AuraDB Professional costs ~$65/GB/month. The production dataset (~10–15 GB) would cost $650–975/mo. Self-hosting on a GCP e2-highmem-2 VM with a persistent disk costs ~$75/mo total. Data safety achieved via GCP snapshot schedule (daily, 7-day retention) rather than managed backup. |

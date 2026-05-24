@@ -54,6 +54,15 @@
 - [x] Add movie poster to `NodeChip` component (#37)
 - [x] Handle missing images gracefully (#37)
 
+## Phase 4.5 — Content Filtering
+**Goal:** Prevent low-quality or irrelevant entries from appearing in optimal paths.
+
+- [x] Exclude movies with `vote_count < 100` from optimal paths (#solve query)
+- [x] Exclude documentaries (TMDB genre ID 99) from optimal paths
+- [x] Store `genre_ids` on Movie nodes via pipeline crawl
+- [ ] Re-run pipeline to populate `genre_ids` on existing nodes
+- [ ] Marvel kill switch (#52)
+
 ## Phase 5 — Franchise Blocklist (v1.5)
 **Goal:** Filter large ensemble franchises that trivialize the graph.
 

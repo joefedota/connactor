@@ -276,6 +276,8 @@ async def post_solve(request: Request, body: SolveRequest):
             MATCH p = allShortestPaths(
                 (a1:Actor {person_id: $source})-[:APPEARED_IN*..12]-(a2:Actor {person_id: $target})
             )
+            WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
+              OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
             RETURN [n IN nodes(p) | CASE labels(n)[0]
                 WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path}
                 WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
