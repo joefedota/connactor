@@ -69,6 +69,37 @@ class DailyUsage:
 
 # ---------- GCP cost (BigQuery) ----------
 
+def fetch_gcp_totals(client: bigquery.Client, end: date) -> tuple[float, float]:
+    """
+    Returns (month_to_date_usd, year_to_date_usd) for all GCP services combined,
+    net of credits. Bounded by `end` (exclusive) so the function is deterministic
+    for a given run.
+    """
+    table_id = f"{settings.gcp_project}.{settings.billing_dataset}.{settings.billing_table}"
+    mtd_start = end.replace(day=1)
+    ytd_start = end.replace(month=1, day=1)
+    query = f"""
+        SELECT
+          SUM(IF(usage_start_time >= @mtd_start,
+                 cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0),
+                 0)) AS mtd,
+          SUM(IF(usage_start_time >= @ytd_start,
+                 cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0),
+                 0)) AS ytd
+        FROM `{table_id}`
+        WHERE usage_start_time >= @ytd_start AND usage_start_time < @end
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("mtd_start", "TIMESTAMP", datetime.combine(mtd_start, datetime.min.time(), timezone.utc)),
+            bigquery.ScalarQueryParameter("ytd_start", "TIMESTAMP", datetime.combine(ytd_start, datetime.min.time(), timezone.utc)),
+            bigquery.ScalarQueryParameter("end", "TIMESTAMP", datetime.combine(end, datetime.min.time(), timezone.utc)),
+        ]
+    )
+    row = next(iter(client.query(query, job_config=job_config).result()))
+    return float(row["mtd"] or 0.0), float(row["ytd"] or 0.0)
+
+
 def fetch_gcp_costs(client: bigquery.Client, start: date, prior_start: date, end: date) -> list[CostRow]:
     """
     Return a list of CostRow per GCP service, summing weekly spend net of credits.
@@ -105,14 +136,20 @@ def fetch_gcp_costs(client: bigquery.Client, start: date, prior_start: date, end
 
 # ---------- Cloudflare cost (subscriptions) ----------
 
-def fetch_cloudflare_cost(account_id: str, token: str) -> CostRow | None:
+def fetch_cloudflare_cost(account_id: str, token: str) -> tuple[CostRow | None, float]:
     """
-    Sum active Cloudflare subscriptions, expressed as a weekly equivalent.
-    Returns None on API failure (so the report still ships).
+    Sum active Cloudflare subscriptions.
+
+    Returns (weekly_row, monthly_total_usd):
+    - weekly_row is what goes in the per-service table
+    - monthly_total_usd is used to prorate MTD/YTD across services
+
+    Returns (None, 0.0) when credentials are missing; returns a 'data unavailable'
+    row with monthly=0 on API failure (so the report still ships).
     """
     if not (account_id and token):
         logger.warning("Cloudflare credentials missing; skipping CF cost row")
-        return None
+        return None, 0.0
     try:
         r = httpx.get(
             f"{CLOUDFLARE_API}/accounts/{account_id}/subscriptions",
@@ -123,21 +160,22 @@ def fetch_cloudflare_cost(account_id: str, token: str) -> CostRow | None:
         subs = r.json().get("result", []) or []
     except Exception as e:
         logger.exception("Cloudflare subscriptions API failed: %s", e)
-        return CostRow(service="Cloudflare (data unavailable)", this_week=0.0, prior_week=0.0)
+        return CostRow(service="Cloudflare (data unavailable)", this_week=0.0, prior_week=0.0), 0.0
 
-    weekly = 0.0
+    monthly = 0.0
     for sub in subs:
         price = float(sub.get("rated_price", {}).get("value") or sub.get("price") or 0.0)
         freq = (sub.get("frequency") or "monthly").lower()
         if freq == "monthly":
-            weekly += price * 7 / 30
+            monthly += price
         elif freq == "yearly":
-            weekly += price / 52
+            monthly += price / 12
         elif freq == "quarterly":
-            weekly += price / 13
+            monthly += price / 3
         elif freq == "weekly":
-            weekly += price
-    return CostRow(service="Cloudflare", this_week=weekly, prior_week=weekly)
+            monthly += price * 30 / 7
+    weekly = monthly * 7 / 30
+    return CostRow(service="Cloudflare", this_week=weekly, prior_week=weekly), monthly
 
 
 # ---------- Cloudflare usage (GraphQL Analytics) ----------
@@ -194,17 +232,56 @@ def _cloudflare_graphql(zone_tag: str, token: str, start: date, end: date) -> li
     ]
 
 
-def fetch_usage(zone_tag: str, token: str, start: date, prior_start: date, end: date) -> tuple[list[DailyUsage], int, int]:
-    """
-    Returns (last-7-days daily breakdown, prior_week_visitors, cumulative_visits_since_launch).
-    """
-    daily = _cloudflare_graphql(zone_tag, token, start, end)
-    prior = _cloudflare_graphql(zone_tag, token, prior_start, start)
-    cumulative = _cloudflare_graphql(zone_tag, token, LAUNCH_DATE, end)
+_GRAPHQL_PERIOD = """
+query ($zone: String!, $start: Time!, $end: Time!) {
+  viewer {
+    zones(filter: {zoneTag: $zone}) {
+      httpRequestsAdaptiveGroups(
+        limit: 1
+        filter: {datetime_geq: $start, datetime_lt: $end}
+      ) {
+        uniq { uniques }
+        sum { pageViews }
+      }
+    }
+  }
+}
+"""
 
-    prior_visitors = sum(d.visitors for d in prior)
-    cumulative_visits = sum(d.visitors for d in cumulative)
-    return daily, prior_visitors, cumulative_visits
+
+def _cloudflare_period_metrics(zone_tag: str, token: str, start: date, end: date) -> tuple[int, int]:
+    """
+    Returns (unique_visitors, pageviews) deduplicated over [start, end) as one bucket
+    — the source of truth for DAU / WAU / MAU / cumulative-since-launch.
+    """
+    if not (zone_tag and token):
+        return 0, 0
+    try:
+        r = httpx.post(
+            f"{CLOUDFLARE_API}/graphql",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "query": _GRAPHQL_PERIOD,
+                "variables": {
+                    "zone": zone_tag,
+                    "start": datetime.combine(start, datetime.min.time(), timezone.utc).isoformat(),
+                    "end": datetime.combine(end, datetime.min.time(), timezone.utc).isoformat(),
+                },
+            },
+            timeout=20.0,
+        )
+        r.raise_for_status()
+        zones = r.json().get("data", {}).get("viewer", {}).get("zones", [])
+        if not zones:
+            return 0, 0
+        groups = zones[0].get("httpRequestsAdaptiveGroups", []) or []
+        if not groups:
+            return 0, 0
+        g = groups[0]
+        return int(g.get("uniq", {}).get("uniques") or 0), int(g.get("sum", {}).get("pageViews") or 0)
+    except Exception as e:
+        logger.exception("Cloudflare period metrics API failed: %s", e)
+        return 0, 0
 
 
 # ---------- HTML render ----------
@@ -216,25 +293,66 @@ def _fmt_pct(p: float | None) -> str:
     return f"{sign}{p*100:.0f}%"
 
 
+def render_chart(daily: list[DailyUsage]) -> str:
+    """
+    Bar chart of daily visitors. Renders as a single-row HTML table — every
+    email client honors this without inline CSS quirks. Each cell holds:
+    count label (top), bar (background-colored div with pixel height), day-of-week (bottom).
+    """
+    if not daily:
+        return ""
+    max_val = max(d.visitors for d in daily) or 1
+    bars = []
+    for d in daily:
+        h = max(2, int(d.visitors / max_val * 100))  # min 2px so empty days are visible
+        bars.append(
+            f'<td valign="bottom" style="padding:0 4px;text-align:center;min-width:40px;">'
+            f'<div style="font-size:11px;color:#444;font-weight:600;margin-bottom:4px;">{d.visitors}</div>'
+            f'<div style="background:#C68DFE;width:26px;height:{h}px;margin:0 auto;border-radius:3px 3px 0 0;"></div>'
+            f'<div style="font-size:10px;color:#888;margin-top:6px;">{d.day.strftime("%a")}</div>'
+            f'<div style="font-size:9px;color:#bbb;">{d.day.strftime("%m/%d")}</div>'
+            f'</td>'
+        )
+    return (
+        '<table cellspacing="0" cellpadding="0" align="center" '
+        'style="border-collapse:collapse;margin:16px auto;">'
+        f'<tr style="vertical-align:bottom;">{"".join(bars)}</tr>'
+        '</table>'
+    )
+
+
 def render_html(
     cost_rows: list[CostRow],
     daily: list[DailyUsage],
-    this_visitors: int,
-    prior_visitors: int,
-    cumulative: int,
+    avg_dau_visitors: float,
+    avg_dau_pageviews: float,
+    avg_dau_prior_visitors: float,
+    wau_visitors: int,
+    wau_pageviews: int,
+    wau_prior_visitors: int,
+    ytd_visitors: int,
+    ytd_pageviews: int,
+    ytd_start: date,
+    mtd_total: float,
+    ytd_total: float,
     start: date,
     end: date,
 ) -> str:
-    visitors_delta = None
-    if prior_visitors > 0:
-        visitors_delta = (this_visitors - prior_visitors) / prior_visitors
-    visitors_drop_flagged = visitors_delta is not None and visitors_delta < -WOW_FLAG_THRESHOLD
+    dau_delta = None
+    if avg_dau_prior_visitors > 0:
+        dau_delta = (avg_dau_visitors - avg_dau_prior_visitors) / avg_dau_prior_visitors
+    dau_drop_flagged = dau_delta is not None and dau_delta < -WOW_FLAG_THRESHOLD
+
+    wau_delta = None
+    if wau_prior_visitors > 0:
+        wau_delta = (wau_visitors - wau_prior_visitors) / wau_prior_visitors
+    wau_drop_flagged = wau_delta is not None and wau_delta < -WOW_FLAG_THRESHOLD
 
     total_this = sum(r.this_week for r in cost_rows)
     total_prior = sum(r.prior_week for r in cost_rows)
     total_delta = ((total_this - total_prior) / total_prior) if total_prior > 0.01 else None
 
-    pageviews_total = sum(d.pageviews for d in daily)
+    chart_html = render_chart(daily)
 
     flag_style = "background:#fff8d6;"
 
@@ -256,20 +374,30 @@ def render_html(
     )
 
     return f"""<!doctype html>
-<html><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#222;max-width:640px;margin:0 auto;padding:24px;">
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#222;max-width:640px;margin:0 auto;padding:24px;">
   <h2 style="margin:0 0 4px;">Connactor weekly report</h2>
   <div style="color:#888;margin-bottom:24px;">Week of {start.isoformat()} – {(end - timedelta(days=1)).isoformat()} (UTC)</div>
 
   <h3 style="margin-top:24px;">Usage</h3>
   <p style="margin:4px 0;">
-    <strong>Last 7 days:</strong> {this_visitors:,} visitors · {pageviews_total:,} pageviews
-    <span style="color:{'#cc0000' if visitors_drop_flagged else '#888'};">
-      ({'⚠ ' if visitors_drop_flagged else ''}{_fmt_pct(visitors_delta)} WoW)
+    <strong>DAU (avg, last 7d):</strong> {avg_dau_visitors:,.1f} visitors/day · {avg_dau_pageviews:,.1f} pageviews/day
+    <span style="color:{'#cc0000' if dau_drop_flagged else '#888'};">
+      ({'⚠ ' if dau_drop_flagged else ''}{_fmt_pct(dau_delta)} WoW)
     </span>
   </p>
   <p style="margin:4px 0;">
-    <strong>Cumulative since launch ({LAUNCH_DATE.isoformat()}):</strong> {cumulative:,} visits
+    <strong>WAU (last 7d):</strong> {wau_visitors:,} unique visitors · {wau_pageviews:,} pageviews
+    <span style="color:{'#cc0000' if wau_drop_flagged else '#888'};">
+      ({'⚠ ' if wau_drop_flagged else ''}{_fmt_pct(wau_delta)} WoW)
+    </span>
   </p>
+  <p style="margin:4px 0;">
+    <strong>YTD users (since {ytd_start.isoformat()}):</strong> {ytd_visitors:,} unique visitors · {ytd_pageviews:,} pageviews
+  </p>
+
+  {chart_html}
+
   <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;margin-top:12px;font-size:14px;">
     <thead><tr style="background:#f5f5f5;text-align:left;">
       <th>Date</th><th style="text-align:right">Visitors</th><th style="text-align:right">Pageviews</th>
@@ -278,6 +406,14 @@ def render_html(
   </table>
 
   <h3 style="margin-top:32px;">Cost</h3>
+  <p style="margin:4px 0;">
+    <strong>Last 7 days:</strong> ${total_this:,.2f}
+    <span style="color:#888;">({_fmt_pct(total_delta)} WoW)</span>
+  </p>
+  <p style="margin:4px 0;"><strong>Month-to-date:</strong> ${mtd_total:,.2f}</p>
+  <p style="margin:4px 0;"><strong>Year-to-date:</strong> ${ytd_total:,.2f}</p>
+
+  <h4 style="margin-top:20px;margin-bottom:8px;color:#555;font-weight:600;">Service breakdown (last 7 days)</h4>
   <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;font-size:14px;">
     <thead><tr style="background:#f5f5f5;text-align:left;">
       <th>Service</th><th style="text-align:right">This week</th><th style="text-align:right">Prior week</th><th style="text-align:right">Δ</th>
@@ -335,17 +471,59 @@ def main() -> None:
 
     bq = bigquery.Client(project=settings.gcp_project)
     cost_rows = fetch_gcp_costs(bq, start=start, prior_start=prior_start, end=end)
-    cf_cost = fetch_cloudflare_cost(settings.cloudflare_account_id, settings.cloudflare_api_token)
-    if cf_cost:
-        cost_rows.append(cf_cost)
+    gcp_mtd, gcp_ytd = fetch_gcp_totals(bq, end=end)
 
-    daily, prior_visitors, cumulative = fetch_usage(
-        settings.cloudflare_zone_tag, settings.cloudflare_api_token,
-        start=start, prior_start=prior_start, end=end,
+    cf_row, cf_monthly = fetch_cloudflare_cost(settings.cloudflare_account_id, settings.cloudflare_api_token)
+    if cf_row:
+        cost_rows.append(cf_row)
+
+    # Prorate the current Cloudflare monthly subscription onto MTD/YTD windows.
+    # Cloudflare's API doesn't expose historical invoices; this is an approximation
+    # that's accurate as long as the subscription set hasn't changed mid-period.
+    day_of_month = end.day - 1  # `end` is exclusive (today UTC 00:00)
+    day_of_year = (end - end.replace(month=1, day=1)).days
+    cf_mtd = cf_monthly * day_of_month / 30
+    cf_ytd = cf_monthly * day_of_year / 30
+
+    mtd_total = gcp_mtd + cf_mtd
+    ytd_total = gcp_ytd + cf_ytd
+
+    zone = settings.cloudflare_zone_tag
+    token = settings.cloudflare_api_token
+
+    # Daily breakdown — drives the chart + per-day table.
+    daily = _cloudflare_graphql(zone, token, start, end)
+    daily_prior = _cloudflare_graphql(zone, token, prior_start, start)
+
+    # DAU = mean of daily uniques across the last 7 days. Same for pageviews.
+    # Prior-week DAU is the same calc shifted back a week, for WoW comparison.
+    avg_dau_visitors = (sum(d.visitors for d in daily) / len(daily)) if daily else 0.0
+    avg_dau_pageviews = (sum(d.pageviews for d in daily) / len(daily)) if daily else 0.0
+    avg_dau_prior_visitors = (sum(d.visitors for d in daily_prior) / len(daily_prior)) if daily_prior else 0.0
+
+    # WAU = unique visitors (deduplicated) over the last 7 days. NOT sum of dailies —
+    # someone who visits Mon AND Wed counts once. Adaptive query handles dedup.
+    wau_visitors, wau_pageviews = _cloudflare_period_metrics(zone, token, start, end)
+    wau_prior_visitors, _ = _cloudflare_period_metrics(zone, token, prior_start, start)
+
+    # YTD users = unique visitors (deduplicated) since Jan 1 of the current year.
+    ytd_start = end.replace(month=1, day=1)
+    ytd_visitors, ytd_pageviews = _cloudflare_period_metrics(zone, token, ytd_start, end)
+
+    html = render_html(
+        cost_rows, daily,
+        avg_dau_visitors=avg_dau_visitors,
+        avg_dau_pageviews=avg_dau_pageviews,
+        avg_dau_prior_visitors=avg_dau_prior_visitors,
+        wau_visitors=wau_visitors,
+        wau_pageviews=wau_pageviews,
+        wau_prior_visitors=wau_prior_visitors,
+        ytd_visitors=ytd_visitors,
+        ytd_pageviews=ytd_pageviews,
+        ytd_start=ytd_start,
+        mtd_total=mtd_total, ytd_total=ytd_total,
+        start=start, end=end,
     )
-    this_visitors = sum(d.visitors for d in daily)
-
-    html = render_html(cost_rows, daily, this_visitors, prior_visitors, cumulative, start, end)
     subject = f"Connactor weekly report — {start.isoformat()}"
 
     if args.dry_run:
