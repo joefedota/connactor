@@ -167,7 +167,7 @@ Generate today's puzzle manually (the production job runs at 06:00 UTC):
 
 ```bash
 cd backend
-uv run python bin/generate_daily_puzzle.py --date $(date +%Y-%m-%d)
+uv run python pipeline/generate_daily_puzzle.py --date $(date +%Y-%m-%d)
 ```
 
 Then visit http://localhost:5173/daily.
@@ -226,11 +226,11 @@ connactor/
       pg.py             # Postgres async SQLAlchemy session
       middleware/
         user_identity.py  # Anonymous cookie identity
-    bin/
-      generate_daily_puzzle.py  # Cloud Run Job: pre-generate tomorrow's daily pair
+    bin/                # Shell scripts only (dump/restore Neo4j)
     migrations/         # Neo4j schema (constraints + indexes)
-    pipeline/           # TMDB data pipeline
+    pipeline/           # TMDB data pipeline + scheduled jobs
       bootstrap.py      # One-command pipeline orchestrator
+      generate_daily_puzzle.py  # Cloud Run Job: pre-generate tomorrow's daily pair
       ingest/           # TMDB crawlers + Neo4j loader
     settings.py         # Pydantic settings (reads from root .env)
     tests/
