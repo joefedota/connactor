@@ -8,7 +8,7 @@ import './GameBoard.css';
 
 export function GameBoard() {
   const navigate = useNavigate();
-  const { game, theme, isLoading, addNode, removeLastFromPath, submit, giveUp, endError, stepError } =
+  const { game, isLoading, addNode, removeLastFromPath, submit, giveUp, endError, stepError } =
     useGameStore();
 
   useEffect(() => {
