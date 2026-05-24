@@ -72,8 +72,8 @@ export function EntitySearch({ mode, onSelect, disabled }: Props) {
 
   return (
     <div className={`entity-search entity-search--${mode}`}>
-      <div className="entity-search__mode-badge">
-        {mode === 'actor' ? '👤 Actor' : '🎬 Movie'}
+      <div className="entity-search__mode-label">
+        {mode === 'actor' ? 'Actor' : 'Movie'}
       </div>
       <div className="entity-search__input-wrap">
         <input
