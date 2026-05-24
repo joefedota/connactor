@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PathDisplay } from '../../components/PathDisplay';
 import { useGameStore } from '../../store/gameStore';
@@ -25,6 +25,7 @@ function buildShareText(
 export function Results() {
   const navigate = useNavigate();
   const { game, theme, resetGame, fetchGame } = useGameStore();
+  const [showAllPaths, setShowAllPaths] = useState(false);
 
   useEffect(() => {
     if (!game || game.status === 'playing') navigate('/');
@@ -69,13 +70,15 @@ export function Results() {
 
       <div className="results__outcome">
         {won && reachedTarget ? (
-          <div className={`results__outcome-badge ${isOptimal ? 'results__outcome-badge--optimal' : 'results__outcome-badge--won'}`}>
-            {isOptimal
-              ? `★ Optimal — ${playerActors} actor${playerActors !== 1 ? 's' : ''}!`
-              : `✓ Connected — ${playerActors} actor${playerActors !== 1 ? 's' : ''}`}
-          </div>
+          <>
+            <div className="results__outcome-title">Connacted!</div>
+            <div className="results__outcome-sub">
+              {playerActors} actor{playerActors !== 1 ? 's' : ''}
+              {isOptimal ? ' — optimal!' : ''}
+            </div>
+          </>
         ) : (
-          <div className="results__outcome-badge results__outcome-badge--gave-up">
+          <div className="results__outcome-title results__outcome-title--gave-up">
             {status === 'gave_up' ? 'Better luck next time' : 'Incomplete path'}
           </div>
         )}
@@ -114,11 +117,27 @@ export function Results() {
         <section className="results__section">
           <div className="results__section-title">
             Best answer — {optimalActors} actor{optimalActors !== 1 ? 's' : ''}
+            {allPaths.length > 1 && (
+              <span className="results__path-count"> · {allPaths.length} paths</span>
+            )}
           </div>
           <div className="results__paths">
-            {allPaths.map((path, i) => (
-              <PathDisplay key={i} path={path} dim={!!(won && !isOptimal)} />
-            ))}
+            <PathDisplay path={allPaths[0]} dim={!!(won && !isOptimal)} />
+            {allPaths.length > 1 && (
+              <>
+                {showAllPaths && allPaths.slice(1).map((path, i) => (
+                  <PathDisplay key={i + 1} path={path} dim={!!(won && !isOptimal)} />
+                ))}
+                <button
+                  className="results__expand-btn"
+                  onClick={() => setShowAllPaths(v => !v)}
+                >
+                  {showAllPaths
+                    ? 'Show less'
+                    : `+${allPaths.length - 1} more path${allPaths.length - 1 !== 1 ? 's' : ''}`}
+                </button>
+              </>
+            )}
           </div>
         </section>
       )}

@@ -4,7 +4,10 @@ TMDb Movie ID Export Downloader (Phase 1 Ticket 2)
 
 Downloads and parses the daily TMDb movie ID export.
 - Fetches `https://files.tmdb.org/p/exports/movie_ids_MM_DD_YYYY.json.gz` (today, with yesterday fallback).
-- Filters to `adult=false` and `popularity > 1.0`.
+- Filters to `adult=false` and `popularity > 0.1` (broad candidate net;
+  vote_count filter happens later in load_neo4j so we keep catalog hits like
+  The Internship (2013) whose popularity has decayed below 1.0 but still has
+  thousands of votes).
 - Uploads filtered list to GCS at `pipeline/movie_ids_to_crawl.json`.
 - Idempotent: skips download if blob already exists in GCS (unless force=True).
 """
@@ -49,7 +52,7 @@ def _parse_and_filter_export(source_path: Path) -> list[dict]:
             total_count += 1
             try:
                 movie = json.loads(line)
-                if not movie.get("adult", True) and movie.get("popularity", 0.0) > 1.0:
+                if not movie.get("adult", True) and movie.get("popularity", 0.0) > 0.1:
                     filtered_movies.append({
                         "id": movie["id"],
                         "title": movie["original_title"],

@@ -33,10 +33,10 @@ TMDB API
 ### Initial Full Load (~4–6 hours, run once)
 
 1. Download TMDB daily movie ID export (`files.tmdb.org/p/exports/movie_ids_MM_DD_YYYY.json.gz`)
-2. Filter to `vote_count > 50` and `popularity > 1.0` (~150–200k qualifying movies)
-3. Async crawl `/movie/{id}/credits` at ~40 req/s for all qualifying movies
+2. Filter at the export to `adult=false` and `popularity > 0.1` (~100–200k candidates) — a deliberately loose net since TMDB's `popularity` is a daily-decaying engagement score, not a quality proxy
+3. Async crawl `/movie/{id}` and `/movie/{id}/credits` at ~35 req/s for all candidates (`vote_count` only ships on the per-movie endpoint, not in the daily export)
 4. Async crawl `/person/{id}` for all unique person IDs
-5. Bulk load into Neo4j via Python neo4j driver using `MERGE` in batches (idempotent; re-runnable)
+5. Bulk load into Neo4j via Python neo4j driver using `MERGE` in batches. **The Movie node load filters by `vote_count > 100` (with a `popularity > 1.0` grace window for brand-new movies that haven't accumulated votes yet) — see `_should_load_movie` in `load_neo4j.py`.** End state: ~16–18k high-signal Movie nodes. (Why a two-stage filter: the TMDB daily export only exposes `popularity`; vote_count lives on the per-movie crawl. A loose popularity gate at export time + a strict vote_count gate at load time keeps catalog hits like *The Internship* (2013, popularity 0.2, votes 4,471) while excluding the long tail of obscure new releases.)
 
 ### Daily Delta Refresh (cron, 9 AM UTC)
 

@@ -293,7 +293,7 @@ async def post_solve(request: Request, body: SolveRequest):
             WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
               OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
             RETURN [n IN nodes(p) | CASE labels(n)[0]
-                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path}
+                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path, fame_rank: n.fame_rank}
                 WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
             END] AS path,
             length(p) AS hops
@@ -312,6 +312,16 @@ async def post_solve(request: Request, body: SolveRequest):
         [NodeInfo(**node) for node in rec["path"]]
         for rec in records
     ]
+    # Sort paths by average fame_rank of intermediate actors ascending (lower rank = more famous).
+    # Intermediate actors = all actors except the first and last in the path.
+    def _path_fame_key(path: list[NodeInfo]) -> float:
+        intermediate = [n for n in path[1:-1] if n.type == "actor"]
+        if not intermediate:
+            return 0.0
+        ranks = [n.fame_rank for n in intermediate if n.fame_rank is not None]
+        return sum(ranks) / len(ranks) if ranks else float("inf")
+
+    paths.sort(key=_path_fame_key)
     return SolveResponse(hop_count=hop_count, paths=paths)
 
 

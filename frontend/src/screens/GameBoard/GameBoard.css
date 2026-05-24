@@ -179,32 +179,12 @@
   line-height: 1;
 }
 
-.game-board__difficulty--easy {
-  background: #E8F5E9;
-  color: #2E7D32;
-  border: 1px solid #C8E6C9;
-}
-
-.game-board__difficulty--medium {
-  background: #FFF3E0;
-  color: #E65100;
-  border: 1px solid #FFE0B2;
-}
-
-.game-board__difficulty--hard {
-  background: #FFEBEE;
-  color: #C62828;
-  border: 1px solid #FFCDD2;
-}
-
-.game-board__difficulty--expert {
-  background: #F3E5F5;
-  color: #7B1FA2;
-  border: 1px solid #E1BEE7;
-}
-
+.game-board__difficulty--easy,
+.game-board__difficulty--medium,
+.game-board__difficulty--hard,
+.game-board__difficulty--expert,
 .game-board__difficulty--random {
-  background: #E3F2FD;
-  color: #1565C0;
-  border: 1px solid #BBDEFB;
+  background: transparent;
+  color: #333333;
+  border: 1px solid #333333;
 }

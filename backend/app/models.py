@@ -17,6 +17,7 @@ class NodeInfo(BaseModel):
     # TMDB image path: `profile_path` for actors, `poster_path` for movies. Frontend
     # prepends `https://image.tmdb.org/t/p/{size}` to construct the final URL.
     image_path: Optional[str] = None
+    fame_rank: Optional[int] = None    # actors only — used for path ranking
 
 
 class GameResponse(BaseModel):
