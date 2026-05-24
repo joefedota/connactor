@@ -75,6 +75,11 @@ export function GameBoard() {
       <header className="game-board__header">
         <div className="game-board__header-left">
           <span className="game-board__logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>Connactor</span>
+          {game.difficulty && (
+            <span className={`game-board__difficulty game-board__difficulty--${game.difficulty}`}>
+              {game.difficulty}
+            </span>
+          )}
         </div>
         <div className="game-board__header-actions">
           {canSubmit && (

@@ -165,3 +165,46 @@
   font-size: 16px;
   color: #888888;
 }
+
+/* Difficulty Badges */
+.game-board__difficulty {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 12px;
+  line-height: 1;
+}
+
+.game-board__difficulty--easy {
+  background: #E8F5E9;
+  color: #2E7D32;
+  border: 1px solid #C8E6C9;
+}
+
+.game-board__difficulty--medium {
+  background: #FFF3E0;
+  color: #E65100;
+  border: 1px solid #FFE0B2;
+}
+
+.game-board__difficulty--hard {
+  background: #FFEBEE;
+  color: #C62828;
+  border: 1px solid #FFCDD2;
+}
+
+.game-board__difficulty--expert {
+  background: #F3E5F5;
+  color: #7B1FA2;
+  border: 1px solid #E1BEE7;
+}
+
+.game-board__difficulty--random {
+  background: #E3F2FD;
+  color: #1565C0;
+  border: 1px solid #BBDEFB;
+}
