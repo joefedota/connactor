@@ -41,10 +41,10 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 }
 
 const DIFFICULTIES = [
-  { id: 'random', label: 'Random', desc: 'Fully random path length and actor pool.',            bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#C68DFE', text: '#222222' },
-  { id: 'easy',   label: 'Easy',   desc: 'Connect two Super Famous stars in exactly 2 hops.',   bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#C68DFE', text: '#222222' },
-  { id: 'medium', label: 'Medium', desc: 'Connect famous actors in 4 hops or fewer.',            bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#C68DFE', text: '#222222' },
-  { id: 'hard',   label: 'Hard',   desc: 'Connect moderately known actors in 6 hops or fewer.',  bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#C68DFE', text: '#222222' },
+  { id: 'random', label: 'Random', desc: 'Fully random path length and actor pool.',            bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
+  { id: 'easy',   label: 'Easy',   desc: 'Connect two Super Famous stars in exactly 2 hops.',   bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
+  { id: 'medium', label: 'Medium', desc: 'Connect famous actors in 4 hops or fewer.',            bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
+  { id: 'hard',   label: 'Hard',   desc: 'Connect moderately known actors in 6 hops or fewer.',  bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
 ];
 
 export function Home() {

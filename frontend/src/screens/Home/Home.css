@@ -22,16 +22,14 @@
   font-size: 80px;
   font-weight: 800;
   letter-spacing: -2px;
-  color: var(--color-accent, #FF00B2);
-  transition: color 0.4s ease;
+  color: #333333;
   margin: 0;
 }
 
 .home__subtitle {
   font-size: 18px;
-  color: var(--color-text, #ffffff);
+  color: #666666;
   margin: 0;
-  transition: color 0.4s ease;
 }
 
 .home__error {
@@ -49,7 +47,7 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -58,7 +56,7 @@
 }
 
 .modal {
-  background: #FAF7F2;
+  background: #ffffff;
   border: none;
   border-radius: 16px;
   padding: 28px 24px;
@@ -80,7 +78,7 @@
   line-height: 1;
 }
 
-.modal__close:hover { color: #111; }
+.modal__close:hover { color: #333333; }
 
 .modal__title {
   margin: 0 0 12px;
@@ -185,10 +183,9 @@
 .difficulty-label {
   font-size: 11px;
   font-weight: 700;
-  color: var(--color-accent, #ffffff);
+  color: #888888;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  transition: color 0.4s ease;
 }
 
 .difficulty-tabs {
@@ -200,11 +197,11 @@
 .difficulty-tab {
   flex: 1;
   background: transparent;
-  border: 1.5px solid var(--color-accent, rgba(255, 255, 255, 0.5));
+  border: 1.5px solid #cccccc;
   padding: 10px 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-accent, #fff);
+  color: #444444;
   cursor: pointer;
   border-radius: 16px;
   transition: all 0.2s ease;
