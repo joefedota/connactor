@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { checkConnected } from '../../api/client';
 import { EntitySearch } from '../../components/EntitySearch';
 import { NodeChip } from '../../components/NodeChip';
 import { useGameStore } from '../../store/gameStore';
@@ -19,6 +20,21 @@ export function GameBoard() {
     if (!game && !isLoading) navigate('/');
   }, [game, isLoading, navigate]);
 
+  const [targetReachable, setTargetReachable] = useState(false);
+
+  useEffect(() => {
+    if (!game) return;
+    const { currentPath, target } = game;
+    const nextType = currentPath.length % 2 === 0 ? 'actor' : 'movie';
+    if (nextType !== 'actor' || currentPath.length < 2) {
+      setTargetReachable(false);
+      return;
+    }
+    const lastNode = currentPath[currentPath.length - 1];
+    checkConnected(lastNode.id, target.id)
+      .then(({ connected }) => setTargetReachable(connected))
+      .catch(() => setTargetReachable(false));
+  }, [game?.currentPath, game?.target]);
 
   if (!game) return isLoading ? <div className="game-board" /> : null;
 
@@ -29,7 +45,7 @@ export function GameBoard() {
     currentPath.length % 2 === 0 ? 'actor' : 'movie';
 
   const lastNode = currentPath[currentPath.length - 1];
-  const canClickTarget = nextType === 'actor' && currentPath.length >= 2;
+  const canClickTarget = targetReachable;
   const canSubmit = lastNode.type === 'movie'; // must end on a movie to submit
 
   const handleSelect = async (node: NodeInfo) => {
