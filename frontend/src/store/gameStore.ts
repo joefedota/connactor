@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as api from '../api/client';
-import type { GameState, NodeInfo } from '../types';
+import type { DailyResponse, GameState, NodeInfo } from '../types';
 
 export interface Theme {
   bg: string;
@@ -15,8 +15,11 @@ interface GameStore {
   isLoading: boolean;
   endError: string | null;
   stepError: string | null;  // shown when actor isn't in the last movie
+  dailyData: DailyResponse | null; // cached GET /daily response
 
   fetchGame: (difficulty?: string, theme?: Theme) => Promise<void>;
+  fetchDailyGame: () => Promise<DailyResponse | null>;
+  submitCompletion: (hops: number, timeMs?: number) => Promise<void>;
   addNode: (node: NodeInfo) => Promise<boolean>;
   removeLastFromPath: () => void;
   submit: () => Promise<boolean>;
@@ -30,6 +33,61 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isLoading: false,
   endError: null,
   stepError: null,
+  dailyData: null,
+
+  fetchDailyGame: async () => {
+    set({ isLoading: true, endError: null, stepError: null });
+    try {
+      const daily = await api.fetchDaily();
+      set({ dailyData: daily });
+      if (!daily.already_completed) {
+        set({
+          game: {
+            gameId: daily.puzzle_id,
+            source: daily.source,
+            target: daily.target,
+            currentPath: [daily.source],
+            status: 'playing',
+            isOptimal: null,
+            allPaths: null,
+            difficulty: 'medium',
+            isDailyChallenge: true,
+            puzzleId: daily.puzzle_id,
+            optimalHops: daily.optimal_hops,
+            startedAt: Date.now(),
+          },
+          isLoading: false,
+        });
+      } else {
+        set({ isLoading: false });
+      }
+      return daily;
+    } catch (e: unknown) {
+      set({ endError: String(e), isLoading: false });
+      return null;
+    }
+  },
+
+  submitCompletion: async (hops: number, timeMs?: number) => {
+    const { game } = get();
+    if (!game) return;
+    try {
+      if (game.isDailyChallenge && game.puzzleId) {
+        await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs });
+      } else {
+        if (!game.optimalHops) return;
+        await api.submitComplete({
+          source_id: game.source.id,
+          target_id: game.target.id,
+          optimal_hops: game.optimalHops,
+          hops,
+          time_ms: timeMs,
+        });
+      }
+    } catch {
+      // completion recording is best-effort; don't block the UI
+    }
+  },
 
   fetchGame: async (difficulty?: string, theme?: Theme) => {
     set({ isLoading: true, endError: null, stepError: null, theme: theme ?? null });
@@ -46,6 +104,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: null,
           difficulty: resp.difficulty,
           requestedDifficulty: difficulty,
+          startedAt: Date.now(),
         },
         isLoading: false,
       });
@@ -97,6 +156,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       const solveResp = await api.solve(game.source.id, game.target.id);
       const fresh = get().game!;
+      const playerHops = newPath.length - 1;
+      const timeMs = fresh.startedAt ? Date.now() - fresh.startedAt : undefined;
       set({
         game: {
           ...fresh,
@@ -106,6 +167,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
+      get().submitCompletion(playerHops, timeMs);
       return true;
     } catch {
       return false;
@@ -150,6 +212,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         api.validatePath(game.source.id, game.target.id, pathIds),
         api.solve(game.source.id, game.target.id),
       ]);
+      const playerHops = finalPath.length - 1;
+      const timeMs = game.startedAt ? Date.now() - game.startedAt : undefined;
       set({
         game: {
           ...game,
@@ -159,6 +223,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
+      get().submitCompletion(playerHops, timeMs);
       return true;
     } catch (e: unknown) {
       set({ endError: String(e) });

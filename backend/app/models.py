@@ -51,3 +51,37 @@ class SolveResponse(BaseModel):
 
 class AutocompleteResponse(BaseModel):
     results: List[NodeInfo]
+
+
+class CompletionInfo(BaseModel):
+    hops: int
+    time_ms: Optional[int] = None
+    completed_at: str
+
+
+class DailyResponse(BaseModel):
+    puzzle_date: str           # YYYY-MM-DD
+    puzzle_id: str
+    source: NodeInfo
+    target: NodeInfo
+    optimal_hops: int
+    already_completed: bool
+    completion: Optional[CompletionInfo] = None
+    current_streak: int = 0
+
+
+class CompleteRequest(BaseModel):
+    puzzle_id: Optional[str] = None   # provided for daily games
+    source_id: Optional[str] = None   # required when puzzle_id is omitted
+    target_id: Optional[str] = None   # required when puzzle_id is omitted
+    optimal_hops: Optional[int] = None  # required when puzzle_id is omitted
+    hops: int
+    time_ms: Optional[int] = None
+
+
+class CompleteResponse(BaseModel):
+    completion_id: str
+    puzzle_id: str
+    hops: int
+    time_ms: Optional[int] = None
+    completed_at: str

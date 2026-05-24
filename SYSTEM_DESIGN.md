@@ -20,8 +20,9 @@ IMDB does not offer a free API for full cast data. Their full credits are availa
 TMDB API
   └─► ingest service (async crawler)
         └─► Neo4j (persistent graph DB, GCP VM)
-              └─► FastAPI backend (stateless)
-                    └─► Redis (pair pool + solve cache)
+              └─► FastAPI backend
+                    ├─► Postgres/Neon (user identity + puzzle + completion state)
+                    └─► Redis (pair pool + solve cache, deferred)
                           └─► React frontend (Cloudflare Pages)
 ```
 
@@ -46,6 +47,46 @@ TMDB API
 ### Hourly Pair Pool Refresh (cron)
 
 Pre-generate 100 valid actor pairs per difficulty tier and store in Redis. Eliminates the 50-retry BFS loop from v1.
+
+---
+
+## Postgres Data Model (User State)
+
+Hosted on **Neon** (serverless Postgres, free tier). Accessed via SQLAlchemy async + asyncpg.
+
+```sql
+users(
+  user_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+
+-- Every unique actor pair played becomes a puzzle row.
+-- Daily puzzles are stamped with is_daily=TRUE and scheduled_date.
+-- If a randomly-played pair is later chosen as the daily, the same row is reused (UPSERT).
+puzzles(
+  puzzle_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id      INT  NOT NULL,
+  target_id      INT  NOT NULL,
+  optimal_hops   INT  NOT NULL,
+  is_daily       BOOL NOT NULL DEFAULT FALSE,
+  scheduled_date DATE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source_id, target_id)
+)
+
+-- Every completed game, daily or random, is recorded here.
+game_completions(
+  completion_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(user_id),
+  puzzle_id     UUID NOT NULL REFERENCES puzzles(puzzle_id),
+  hops          INT  NOT NULL,
+  time_ms       INT,
+  completed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, puzzle_id)
+)
+```
+
+**Anonymous identity**: HTTPOnly cookie signed with `itsdangerous.URLSafeSerializer`. Created on first request, persists 2 years. No login required.
 
 ---
 

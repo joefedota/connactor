@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     gcs_bucket: str = "connactor-data"
     gcp_project: str = "connactor-497019"
 
+    # Postgres (Neon in prod, local postgres:16 in dev)
+    database_url: str = "postgresql+asyncpg://connactor:connactorpassword@localhost:5432/connactor"
+    # Used to sign the anonymous user identity cookie
+    cookie_secret: str = "dev-cookie-secret-change-in-prod"
+
     # Cost + usage report (scripts/cost_report.py)
     billing_dataset: str = "billing_export"
     billing_table: str = "gcp_billing_export_resource_v1_017EE0_4F04E9_9FCF85"
