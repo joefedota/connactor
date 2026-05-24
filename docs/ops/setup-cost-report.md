@@ -1,6 +1,6 @@
-# Weekly cost + usage report
+# Daily cost + usage report
 
-A Cloud Run Job (`connactor-cost-report`) builds a per-service spend breakdown for the prior 7 days, adds Cloudflare Web Analytics visitor counts, and emails the result via Resend. Cloud Scheduler triggers it weekly. Same image as the API/pipeline — only the entrypoint differs.
+A Cloud Run Job (`connactor-cost-report`) builds a rolling-7-day per-service spend breakdown, adds Cloudflare Web Analytics visitor counts, and emails the result via Resend. Cloud Scheduler triggers it daily. Same image as the API/pipeline — only the entrypoint differs. (Resend free tier covers 100 sends/day, daily reports use ~1.)
 
 Sources:
 - **GCP cost** — BigQuery billing export (`gcp_billing_export_resource_v1_*` table)
@@ -100,7 +100,7 @@ gcloud run jobs create connactor-cost-report \
 
 No VPC egress flags needed — this job hits public APIs only (BigQuery, Cloudflare, Resend).
 
-## Schedule weekly (Monday 14:00 UTC = 9am Eastern / 6am Pacific)
+## Schedule daily (14:00 UTC = 9am Eastern / 6am Pacific)
 
 ```bash
 gcloud run jobs add-iam-policy-binding connactor-cost-report \
@@ -110,10 +110,10 @@ gcloud run jobs add-iam-policy-binding connactor-cost-report \
 
 PROJECT_NUMBER=$(gcloud projects describe connactor-497019 --format='value(projectNumber)')
 
-gcloud scheduler jobs create http connactor-cost-report-weekly \
+gcloud scheduler jobs create http connactor-cost-report-daily \
   --project connactor-497019 \
   --location us-central1 \
-  --schedule "0 14 * * 1" \
+  --schedule "0 14 * * *" \
   --time-zone "UTC" \
   --http-method POST \
   --uri "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_NUMBER}/jobs/connactor-cost-report:run" \
@@ -137,8 +137,8 @@ cd backend && uv run python scripts/cost_report.py --dry-run
 
 Pause / resume:
 ```bash
-gcloud scheduler jobs pause connactor-cost-report-weekly --project connactor-497019 --location us-central1
-gcloud scheduler jobs resume connactor-cost-report-weekly --project connactor-497019 --location us-central1
+gcloud scheduler jobs pause connactor-cost-report-daily --project connactor-497019 --location us-central1
+gcloud scheduler jobs resume connactor-cost-report-daily --project connactor-497019 --location us-central1
 ```
 
 Reading logs:

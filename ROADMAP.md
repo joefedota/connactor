@@ -81,4 +81,4 @@
 ## Phase 8 — Ops & Observability
 **Goal:** Don't get surprised by spend or by traffic going to zero.
 
-- [x] Weekly cost + usage email (GCP BigQuery billing export + Cloudflare Web Analytics + Resend) — issue #47
+- [x] Daily cost + usage email (GCP BigQuery billing export + Cloudflare Web Analytics + Resend) — issue #47
