@@ -22,16 +22,13 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+from google.api_core.exceptions import GoogleAPIError, NotFound
 from google.cloud import bigquery
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from settings import settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# Date connactor.com first served traffic via Cloudflare. Used as the
-# "cumulative since launch" anchor for usage analytics.
-LAUNCH_DATE = date(2026, 5, 23)
 
 # Threshold for flagging a week-over-week change as notable (cost ↑ or usage ↓).
 WOW_FLAG_THRESHOLD = 0.25
@@ -96,7 +93,11 @@ def fetch_gcp_totals(client: bigquery.Client, end: date) -> tuple[float, float]:
             bigquery.ScalarQueryParameter("end", "TIMESTAMP", datetime.combine(end, datetime.min.time(), timezone.utc)),
         ]
     )
-    row = next(iter(client.query(query, job_config=job_config).result()))
+    try:
+        row = next(iter(client.query(query, job_config=job_config).result()))
+    except (NotFound, GoogleAPIError) as e:
+        logger.warning("BigQuery totals query failed (likely billing export not yet populated): %s", e)
+        return 0.0, 0.0
     return float(row["mtd"] or 0.0), float(row["ytd"] or 0.0)
 
 
@@ -127,11 +128,15 @@ def fetch_gcp_costs(client: bigquery.Client, start: date, prior_start: date, end
             bigquery.ScalarQueryParameter("end", "TIMESTAMP", datetime.combine(end, datetime.min.time(), timezone.utc)),
         ]
     )
-    rows = client.query(query, job_config=job_config).result()
-    return [
-        CostRow(service=r["service"], this_week=float(r["usd_this_week"]), prior_week=float(r["usd_prior_week"]))
-        for r in rows
-    ]
+    try:
+        rows = client.query(query, job_config=job_config).result()
+        return [
+            CostRow(service=r["service"], this_week=float(r["usd_this_week"]), prior_week=float(r["usd_prior_week"]))
+            for r in rows
+        ]
+    except (NotFound, GoogleAPIError) as e:
+        logger.warning("BigQuery cost query failed (likely billing export not yet populated): %s", e)
+        return []
 
 
 # ---------- Cloudflare cost (subscriptions) ----------
@@ -232,58 +237,6 @@ def _cloudflare_graphql(zone_tag: str, token: str, start: date, end: date) -> li
     ]
 
 
-_GRAPHQL_PERIOD = """
-query ($zone: String!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: {zoneTag: $zone}) {
-      httpRequestsAdaptiveGroups(
-        limit: 1
-        filter: {datetime_geq: $start, datetime_lt: $end}
-      ) {
-        uniq { uniques }
-        sum { pageViews }
-      }
-    }
-  }
-}
-"""
-
-
-def _cloudflare_period_metrics(zone_tag: str, token: str, start: date, end: date) -> tuple[int, int]:
-    """
-    Returns (unique_visitors, pageviews) deduplicated over [start, end) as one bucket
-    — the source of truth for DAU / WAU / MAU / cumulative-since-launch.
-    """
-    if not (zone_tag and token):
-        return 0, 0
-    try:
-        r = httpx.post(
-            f"{CLOUDFLARE_API}/graphql",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={
-                "query": _GRAPHQL_PERIOD,
-                "variables": {
-                    "zone": zone_tag,
-                    "start": datetime.combine(start, datetime.min.time(), timezone.utc).isoformat(),
-                    "end": datetime.combine(end, datetime.min.time(), timezone.utc).isoformat(),
-                },
-            },
-            timeout=20.0,
-        )
-        r.raise_for_status()
-        zones = r.json().get("data", {}).get("viewer", {}).get("zones", [])
-        if not zones:
-            return 0, 0
-        groups = zones[0].get("httpRequestsAdaptiveGroups", []) or []
-        if not groups:
-            return 0, 0
-        g = groups[0]
-        return int(g.get("uniq", {}).get("uniques") or 0), int(g.get("sum", {}).get("pageViews") or 0)
-    except Exception as e:
-        logger.exception("Cloudflare period metrics API failed: %s", e)
-        return 0, 0
-
-
 # ---------- HTML render ----------
 
 def _fmt_pct(p: float | None) -> str:
@@ -327,12 +280,6 @@ def render_html(
     avg_dau_visitors: float,
     avg_dau_pageviews: float,
     avg_dau_prior_visitors: float,
-    wau_visitors: int,
-    wau_pageviews: int,
-    wau_prior_visitors: int,
-    ytd_visitors: int,
-    ytd_pageviews: int,
-    ytd_start: date,
     mtd_total: float,
     ytd_total: float,
     start: date,
@@ -342,11 +289,6 @@ def render_html(
     if avg_dau_prior_visitors > 0:
         dau_delta = (avg_dau_visitors - avg_dau_prior_visitors) / avg_dau_prior_visitors
     dau_drop_flagged = dau_delta is not None and dau_delta < -WOW_FLAG_THRESHOLD
-
-    wau_delta = None
-    if wau_prior_visitors > 0:
-        wau_delta = (wau_visitors - wau_prior_visitors) / wau_prior_visitors
-    wau_drop_flagged = wau_delta is not None and wau_delta < -WOW_FLAG_THRESHOLD
 
     total_this = sum(r.this_week for r in cost_rows)
     total_prior = sum(r.prior_week for r in cost_rows)
@@ -386,15 +328,6 @@ def render_html(
       ({'⚠ ' if dau_drop_flagged else ''}{_fmt_pct(dau_delta)} WoW)
     </span>
   </p>
-  <p style="margin:4px 0;">
-    <strong>WAU (last 7d):</strong> {wau_visitors:,} unique visitors · {wau_pageviews:,} pageviews
-    <span style="color:{'#cc0000' if wau_drop_flagged else '#888'};">
-      ({'⚠ ' if wau_drop_flagged else ''}{_fmt_pct(wau_delta)} WoW)
-    </span>
-  </p>
-  <p style="margin:4px 0;">
-    <strong>YTD users (since {ytd_start.isoformat()}):</strong> {ytd_visitors:,} unique visitors · {ytd_pageviews:,} pageviews
-  </p>
 
   {chart_html}
 
@@ -429,8 +362,9 @@ def render_html(
     </tbody>
   </table>
 
-  <p style="color:#888;font-size:12px;margin-top:32px;">
-    Generated by <code>connactor-cost-report</code>. <code>⚠</code> = WoW change exceeds ±25%.
+  <p style="color:#888;font-size:12px;margin-top:32px;line-height:1.5;">
+    Generated by <code>connactor-cost-report</code>. <code>⚠</code> = WoW change exceeds ±25%.<br>
+    Usage data via Cloudflare Web Analytics. WAU / YTD / retention metrics intentionally omitted — Cloudflare's free tier doesn't expose cross-day deduplication. See issue for proper analytics infra.
   </p>
 </body></html>"""
 
@@ -501,26 +435,11 @@ def main() -> None:
     avg_dau_pageviews = (sum(d.pageviews for d in daily) / len(daily)) if daily else 0.0
     avg_dau_prior_visitors = (sum(d.visitors for d in daily_prior) / len(daily_prior)) if daily_prior else 0.0
 
-    # WAU = unique visitors (deduplicated) over the last 7 days. NOT sum of dailies —
-    # someone who visits Mon AND Wed counts once. Adaptive query handles dedup.
-    wau_visitors, wau_pageviews = _cloudflare_period_metrics(zone, token, start, end)
-    wau_prior_visitors, _ = _cloudflare_period_metrics(zone, token, prior_start, start)
-
-    # YTD users = unique visitors (deduplicated) since Jan 1 of the current year.
-    ytd_start = end.replace(month=1, day=1)
-    ytd_visitors, ytd_pageviews = _cloudflare_period_metrics(zone, token, ytd_start, end)
-
     html = render_html(
         cost_rows, daily,
         avg_dau_visitors=avg_dau_visitors,
         avg_dau_pageviews=avg_dau_pageviews,
         avg_dau_prior_visitors=avg_dau_prior_visitors,
-        wau_visitors=wau_visitors,
-        wau_pageviews=wau_pageviews,
-        wau_prior_visitors=wau_prior_visitors,
-        ytd_visitors=ytd_visitors,
-        ytd_pageviews=ytd_pageviews,
-        ytd_start=ytd_start,
         mtd_total=mtd_total, ytd_total=ytd_total,
         start=start, end=end,
     )
