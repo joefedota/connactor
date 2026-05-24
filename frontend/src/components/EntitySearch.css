@@ -16,12 +16,12 @@
 
 .entity-search__input {
   width: 100%;
-  padding: 16px 20px;
-  border-radius: 20px;
+  padding: 12px 16px;
+  border-radius: 16px;
   border: 2px solid #444444;
   background: #FAF7F2;
   color: #444444;
-  font-size: 20px;
+  font-size: 16px;
   font-family: inherit;
   font-weight: 500;
   outline: none;
