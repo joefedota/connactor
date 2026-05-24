@@ -534,7 +534,7 @@ async def _compute_streak(session, user_id: str) -> int:
 
 @app.get("/daily", response_model=DailyResponse)
 async def get_daily(request: Request):
-    today = datetime.date.today().isoformat()
+    today = datetime.date.today()
     driver = request.app.state.neo4j
     user_id: str = request.state.user_id
 
@@ -572,7 +572,7 @@ async def get_daily(request: Request):
         streak = await _compute_streak(session, user_id)
 
     return DailyResponse(
-        puzzle_date=today,
+        puzzle_date=today.isoformat(),
         puzzle_id=puzzle_id,
         source=source_node,
         target=target_node,
