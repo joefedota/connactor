@@ -45,3 +45,23 @@ async def test_autocomplete_invalid_type(client):
     # Type must be actor or movie
     response = await client.get("/autocomplete?q=Alice&type=director")
     assert response.status_code == 422
+
+
+async def test_autocomplete_movie_multi_term_and_semantics(client):
+    # Regression for #38: multi-term queries must require ALL terms to match.
+    # Pre-fix, "TestFilm Three" returned all 5 TestFilms ordered by vote_count
+    # because "TestFilm" alone matched everything and "Three" was OR'd.
+    response = await client.get("/autocomplete?q=TestFilm%20Three&type=movie")
+    assert response.status_code == 200
+    labels = [r["label"] for r in response.json()["results"]]
+    assert labels == ["TestFilm Three"]
+
+
+async def test_autocomplete_movie_relevance_beats_votes(client):
+    # Regression for #38: a low-vote-count exact match should still surface
+    # ahead of high-vote-count near-misses. "Solo Film" has 10 votes; the 5
+    # TestFilms have 50–1000. Pre-fix, "Solo" returned the popular TestFilms.
+    response = await client.get("/autocomplete?q=Solo&type=movie")
+    assert response.status_code == 200
+    labels = [r["label"] for r in response.json()["results"]]
+    assert labels == ["Solo Film"]

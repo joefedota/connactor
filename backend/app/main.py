@@ -18,6 +18,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from neo4j.exceptions import ClientError
 
 from app.db import get_driver
 from app.models import (
@@ -33,6 +34,27 @@ from app.models import (
 
 MAX_GAME_ATTEMPTS = 20
 MAX_PATH_HOPS = 12
+
+# Lucene QueryParser special chars per Neo4j fulltext index (Lucene Classic syntax).
+_LUCENE_SPECIALS = r'+-&|!(){}[]^"~*?:\/'
+_LUCENE_ESCAPE_TABLE = str.maketrans({c: f"\\{c}" for c in _LUCENE_SPECIALS})
+
+
+def _build_fulltext_query(q: str) -> str:
+    """
+    Turn a user query into a Lucene query with AND semantics.
+
+    Each whitespace-delimited token is escaped and prefixed with `+` (required match).
+    The last token also gets a trailing `*` so an in-progress word matches by prefix.
+    Returns "" if no usable tokens remain — callers should short-circuit to an empty
+    result rather than send "" to Neo4j (which would raise a parse error).
+    """
+    tokens = [t.translate(_LUCENE_ESCAPE_TABLE) for t in q.split() if t.strip()]
+    if not tokens:
+        return ""
+    parts = [f"+{t}" for t in tokens[:-1]]
+    parts.append(f"+{tokens[-1]}*")
+    return " ".join(parts)
 
 # Difficulty is determined by `a.fame_rank` — a 0-indexed rank where the actor's
 # fame_score is the vote_count of their 3rd-most-voted movie. Heavily skews toward
@@ -281,36 +303,45 @@ async def get_autocomplete(
     type: str = Query(..., pattern="^(actor|movie)$"),
     limit: int = Query(10, ge=1, le=20),
 ):
+    search = _build_fulltext_query(q)
+    if not search:
+        return AutocompleteResponse(results=[])
+
     driver = request.app.state.neo4j
 
     async with driver.session() as session:
-        if type == "actor":
-            result = await session.run(
-                """
-                CALL db.index.fulltext.queryNodes('actorNames', $search)
-                YIELD node, score
-                RETURN node.person_id AS id, node.name AS label,
-                       node.popularity AS popularity, node.profile_path AS profile_path
-                ORDER BY node.popularity DESC
-                LIMIT $limit
-                """,
-                search=q + "*",
-                limit=limit,
-            )
-        else:
-            result = await session.run(
-                """
-                CALL db.index.fulltext.queryNodes('movieTitles', $search)
-                YIELD node, score
-                RETURN node.movie_id AS id, node.title AS label,
-                       node.year AS year, node.vote_count AS vote_count
-                ORDER BY node.vote_count DESC
-                LIMIT $limit
-                """,
-                search=q + "*",
-                limit=limit,
-            )
-        records = await result.data()
+        try:
+            if type == "actor":
+                result = await session.run(
+                    """
+                    CALL db.index.fulltext.queryNodes('actorNames', $search)
+                    YIELD node, score
+                    RETURN node.person_id AS id, node.name AS label,
+                           node.popularity AS popularity, node.profile_path AS profile_path
+                    ORDER BY score DESC, node.popularity DESC
+                    LIMIT $limit
+                    """,
+                    search=search,
+                    limit=limit,
+                )
+            else:
+                result = await session.run(
+                    """
+                    CALL db.index.fulltext.queryNodes('movieTitles', $search)
+                    YIELD node, score
+                    RETURN node.movie_id AS id, node.title AS label,
+                           node.year AS year, node.vote_count AS vote_count
+                    ORDER BY score DESC, node.vote_count DESC
+                    LIMIT $limit
+                    """,
+                    search=search,
+                    limit=limit,
+                )
+            records = await result.data()
+        except ClientError:
+            # Malformed Lucene query (e.g. user typed only escape-special chars) —
+            # return empty rather than 500.
+            return AutocompleteResponse(results=[])
 
     results = []
     for rec in records:
