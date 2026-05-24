@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { autocomplete } from '../api/client';
 import type { NodeInfo } from '../types';
+import { tmdbImage } from '../utils/tmdbImage';
 import './EntitySearch.css';
 
 interface Props {
@@ -93,19 +94,30 @@ export function EntitySearch({ mode, onSelect, disabled }: Props) {
         />
         {open && results.length > 0 && (
           <ul className="entity-search__dropdown" role="listbox">
-            {results.map((node, i) => (
-              <li
-                key={node.id}
-                className={`entity-search__option${i === activeIndex ? ' entity-search__option--active' : ''}`}
-                role="option"
-                aria-selected={i === activeIndex}
-                onMouseDown={() => handleSelect(node)}
-                onMouseEnter={() => setActiveIndex(i)}
-              >
-                {node.label}
-                {node.year && <span className="entity-search__year"> ({node.year})</span>}
-              </li>
-            ))}
+            {results.map((node, i) => {
+              const imageUrl = tmdbImage(node.image_path, 'w92');
+              const isActive = i === activeIndex;
+              return (
+                <li
+                  key={node.id}
+                  className={`entity-search__option${isActive ? ' entity-search__option--active' : ''}`}
+                  role="option"
+                  aria-selected={isActive}
+                  onMouseDown={() => handleSelect(node)}
+                  onMouseEnter={() => setActiveIndex(i)}
+                >
+                  <span className="entity-search__option-label">
+                    {node.label}
+                    {node.year && <span className="entity-search__year"> ({node.year})</span>}
+                  </span>
+                  {isActive && imageUrl && (
+                    <span className={`entity-search__option-photo entity-search__option-photo--${node.type}`}>
+                      <img src={imageUrl} alt="" draggable={false} />
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

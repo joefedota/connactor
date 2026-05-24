@@ -102,6 +102,7 @@ async def _crawl_one_details(
             "runtime": body.get("runtime"),
             "original_language": body.get("original_language"),
             "collection_id": collection.get("id") if collection else None,
+            "poster_path": body.get("poster_path"),
         }) + "\n")
         output_fd.flush()
         return True

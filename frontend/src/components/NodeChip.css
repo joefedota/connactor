@@ -1,4 +1,5 @@
 .node-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -7,6 +8,10 @@
   font-size: 18px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.node-chip--peekable {
+  cursor: zoom-in;
 }
 
 .node-chip__label {
@@ -48,4 +53,51 @@
 
 .node-chip__remove:hover {
   opacity: 1;
+}
+
+/* Hover/tap photo popover — child of .node-chip so hover state survives
+   pointer movement onto the photo (no mouseleave fires when moving to a
+   descendant). Flush against chip top (no gap) to keep the hover region
+   contiguous. */
+.node-chip__photo {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  z-index: 10;
+  animation: node-chip-photo-in 120ms ease-out;
+}
+
+.node-chip__photo img {
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.node-chip__photo--actor img {
+  width: 112px;
+  height: 112px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.node-chip__photo--movie img {
+  width: 110px;
+  height: auto;
+  border-radius: 6px;
+}
+
+@keyframes node-chip-photo-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
