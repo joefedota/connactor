@@ -11,25 +11,38 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #888888;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
-.path-display__chain {
+.path-display__stack {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
 }
 
-.path-display__entry {
-  display: inline-flex;
+/* Source and target actors: flush left */
+.path-display__actor-row {
+  display: flex;
   align-items: center;
-  gap: 6px;
 }
 
-.path-display__arrow {
+/* Intermediate actors: indented */
+.path-display__actor-row--indented {
+  padding-left: 28px;
+}
+
+/* Movies: indented with a downward connector */
+.path-display__movie-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+}
+
+.path-display__connector {
   color: #bbbbbb;
-  font-size: 16px;
+  font-size: 13px;
   flex-shrink: 0;
+  line-height: 1;
 }
