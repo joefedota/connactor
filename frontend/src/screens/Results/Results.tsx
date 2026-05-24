@@ -4,51 +4,55 @@ import { PathDisplay } from '../../components/PathDisplay';
 import { useGameStore } from '../../store/gameStore';
 import './Results.css';
 
-// hop_count from API = edge count; movies = edges / 2
-function movieCount(hopCount: number): number {
-  return Math.floor(hopCount / 2);
+// intermediate actors = total actors minus start and end
+function actorCount(pathLength: number): number {
+  return Math.ceil(pathLength / 2) - 2;
 }
 
 function buildShareText(
   source: string,
   target: string,
-  playerMovies: number,
-  optimalMovies: number,
+  playerActors: number,
+  optimalActors: number,
   isOptimal: boolean | null,
 ) {
   const statusLine = isOptimal
     ? '✓ Optimal!'
-    : `Best: ${optimalMovies} movie${optimalMovies !== 1 ? 's' : ''}`;
-  return `Connactor\n${source} → ${target}\n${playerMovies} movie${playerMovies !== 1 ? 's' : ''} — ${statusLine}`;
+    : `Best: ${optimalActors} actor${optimalActors !== 1 ? 's' : ''}`;
+  return `Connactor\n${source} → ${target}\n${playerActors} actor${playerActors !== 1 ? 's' : ''} — ${statusLine}`;
 }
 
 export function Results() {
   const navigate = useNavigate();
-  const { game, resetGame, fetchGame } = useGameStore();
+  const { game, theme, resetGame, fetchGame } = useGameStore();
 
   useEffect(() => {
     if (!game || game.status === 'playing') navigate('/');
   }, [game, navigate]);
 
+  useEffect(() => {
+    document.body.style.background = '#FAF7F2';
+  }, []);
+
   if (!game || game.status === 'playing') return null;
 
   const { source, target, currentPath, status, isOptimal, allPaths } = game;
 
-  // Count movies in player's path (every other node starting at index 1)
-  const playerMovies = currentPath.filter((n) => n.type === 'movie').length;
-  const optimalMovies = allPaths ? movieCount(allPaths[0].length - 1) : playerMovies;
+  const playerActors = Math.max(0, currentPath.filter((n) => n.type === 'actor').length - 2);
+  const optimalActors = allPaths && allPaths.length > 0 ? actorCount(allPaths[0].length) : playerActors;
   const won = status === 'won';
   const reachedTarget = currentPath[currentPath.length - 1]?.id === target.id;
 
-  const handlePlayAgain = async () => {
+  const handlePlayAgain = () => {
     const nextDifficulty = game.requestedDifficulty;
+    const savedTheme = theme;
     resetGame();
-    await fetchGame(nextDifficulty);
+    fetchGame(nextDifficulty, savedTheme ?? undefined);
     navigate('/game');
   };
 
   const handleShare = async () => {
-    const text = buildShareText(source.label, target.label, playerMovies, optimalMovies, isOptimal);
+    const text = buildShareText(source.label, target.label, playerActors, optimalActors, isOptimal);
     try {
       await navigator.clipboard.writeText(text);
       alert('Copied to clipboard!');
@@ -60,15 +64,15 @@ export function Results() {
   return (
     <div className="results">
       <header className="results__header">
-        <span className="results__logo">Connactor</span>
+        <span className="results__logo" onClick={() => { resetGame(); navigate('/'); }} style={{ cursor: 'pointer' }}>Connactor</span>
       </header>
 
       <div className="results__outcome">
         {won && reachedTarget ? (
           <div className={`results__outcome-badge ${isOptimal ? 'results__outcome-badge--optimal' : 'results__outcome-badge--won'}`}>
             {isOptimal
-              ? `★ Optimal — ${playerMovies} movie${playerMovies !== 1 ? 's' : ''}!`
-              : `✓ Connected — ${playerMovies} movie${playerMovies !== 1 ? 's' : ''}`}
+              ? `★ Optimal — ${playerActors} actor${playerActors !== 1 ? 's' : ''}!`
+              : `✓ Connected — ${playerActors} actor${playerActors !== 1 ? 's' : ''}`}
           </div>
         ) : (
           <div className="results__outcome-badge results__outcome-badge--gave-up">
@@ -81,15 +85,15 @@ export function Results() {
       </div>
 
       {/* Optimal answer callout */}
-      {allPaths && (
+      {allPaths && allPaths.length > 0 && (
         <div className="results__optimal-callout">
           <span className="results__optimal-label">Best answer</span>
           <span className="results__optimal-count">
-            {optimalMovies} movie{optimalMovies !== 1 ? 's' : ''}
+            {optimalActors} actor{optimalActors !== 1 ? 's' : ''}
           </span>
           {won && reachedTarget && (
             <span className={`results__optimal-delta ${isOptimal ? 'results__optimal-delta--even' : 'results__optimal-delta--over'}`}>
-              {isOptimal ? 'You matched it!' : `You used ${playerMovies - optimalMovies} extra`}
+              {isOptimal ? 'You matched it!' : `You used ${playerActors - optimalActors} extra`}
             </span>
           )}
         </div>
@@ -100,7 +104,7 @@ export function Results() {
         <section className="results__section">
           <PathDisplay
             path={currentPath}
-            label={`Your path — ${playerMovies} movie${playerMovies !== 1 ? 's' : ''}`}
+            label={`Your path — ${playerActors} actor${playerActors !== 1 ? 's' : ''}`}
           />
         </section>
       )}
@@ -109,7 +113,7 @@ export function Results() {
       {allPaths && allPaths.length > 0 && (
         <section className="results__section">
           <div className="results__section-title">
-            Optimal path{allPaths.length > 1 ? 's' : ''} — {optimalMovies} movie{optimalMovies !== 1 ? 's' : ''}
+            Best answer — {optimalActors} actor{optimalActors !== 1 ? 's' : ''}
           </div>
           <div className="results__paths">
             {allPaths.map((path, i) => (

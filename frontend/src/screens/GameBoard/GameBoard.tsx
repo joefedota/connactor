@@ -8,18 +8,19 @@ import './GameBoard.css';
 
 export function GameBoard() {
   const navigate = useNavigate();
-  const { game, addNode, removeLastFromPath, giveUp, submit, endError, stepError } =
+  const { game, theme, isLoading, addNode, removeLastFromPath, submit, giveUp, endError, stepError } =
     useGameStore();
 
   useEffect(() => {
-    if (!game) navigate('/');
-  }, [game, navigate]);
+    document.body.style.background = '#FAF7F2';
+  }, []);
 
   useEffect(() => {
-    if (game?.status !== 'playing') navigate('/results');
-  }, [game?.status, navigate]);
+    if (!game && !isLoading) navigate('/');
+  }, [game, isLoading, navigate]);
 
-  if (!game || game.status !== 'playing') return null;
+
+  if (!game) return isLoading ? <div className="game-board" /> : null;
 
   const { source, target, currentPath } = game;
 
@@ -28,7 +29,7 @@ export function GameBoard() {
     currentPath.length % 2 === 0 ? 'actor' : 'movie';
 
   const lastNode = currentPath[currentPath.length - 1];
-  const canClickTarget = nextType === 'actor' && currentPath.length >= 3;
+  const canClickTarget = nextType === 'actor' && currentPath.length >= 2;
   const canSubmit = lastNode.type === 'movie'; // must end on a movie to submit
 
   const handleSelect = async (node: NodeInfo) => {
@@ -37,18 +38,18 @@ export function GameBoard() {
 
   const handleTargetClick = async () => {
     if (!canClickTarget) return;
-    await addNode(target);
-    // Navigation handled by the useEffect watching game.status
+    const won = await addNode(target);
+    if (won) navigate('/results');
   };
 
   const handleSubmit = async () => {
-    await submit();
-    // Navigation handled by the useEffect watching game.status
+    const won = await submit();
+    if (won) navigate('/results');
   };
 
   const handleGiveUp = async () => {
     await giveUp();
-    // Navigation handled by the useEffect watching game.status
+    navigate('/results');
   };
 
   const intermediateNodes = currentPath.slice(1);
@@ -57,10 +58,7 @@ export function GameBoard() {
     <div className="game-board">
       <header className="game-board__header">
         <div className="game-board__header-left">
-          <span className="game-board__logo">Connactor</span>
-          <span className={`difficulty-pill difficulty-pill--${game.difficulty}`}>
-            {game.difficulty}
-          </span>
+          <span className="game-board__logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>Connactor</span>
         </div>
         <div className="game-board__header-actions">
           {canSubmit && (
@@ -81,14 +79,12 @@ export function GameBoard() {
         </div>
         <div className="game-board__actor-divider">→</div>
         <div className="game-board__actor-card">
-          <div className="game-board__actor-label">
-            {canClickTarget ? 'Tap to finish →' : 'Reach'}
-          </div>
+          <div className="game-board__actor-label">Reach</div>
           <div
             className={canClickTarget ? 'game-board__target--clickable' : ''}
             onClick={handleTargetClick}
           >
-            <NodeChip node={target} faded={!canClickTarget} />
+            <NodeChip node={target} />
           </div>
         </div>
       </div>
@@ -97,14 +93,14 @@ export function GameBoard() {
         <div className="game-board__chain">
           <div className="game-board__chain-scroll">
             {intermediateNodes.map((node, i) => (
-              <span key={`${node.id}-${i}`} className="game-board__chain-entry">
+              <div key={`${node.id}-${i}`} className={`game-board__chain-entry game-board__chain-entry--${node.type}`}>
                 <span className="game-board__chain-arrow">→</span>
                 <NodeChip
                   node={node}
                   removable={i === intermediateNodes.length - 1}
                   onRemove={removeLastFromPath}
                 />
-              </span>
+              </div>
             ))}
           </div>
         </div>
@@ -116,6 +112,14 @@ export function GameBoard() {
 
       <div className="game-board__search">
         <EntitySearch mode={nextType} onSelect={handleSelect} />
+        {canClickTarget && (
+          <div className="game-board__finish-row">
+            <span className="game-board__finish-label">or finish:</span>
+            <div onClick={handleTargetClick} style={{ cursor: 'pointer' }}>
+              <NodeChip node={target} />
+            </div>
+          </div>
+        )}
       </div>
 
       {stepError && (

@@ -4,7 +4,7 @@
   align-items: center;
   justify-content: center;
   padding: 12px 28px;
-  border-radius: 10px;
+  border-radius: 16px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -17,24 +17,25 @@
 .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
 .btn--primary {
-  background: linear-gradient(135deg, #4a4aff, #7b4aff);
-  color: #fff;
+  background: var(--color-accent, #FF00B2);
+  color: var(--color-on-accent, #fff);
+  transition: background 0.4s ease, color 0.4s ease;
 }
 
 .btn--primary:hover:not(:disabled) { opacity: 0.9; }
 
 .btn--ghost {
   background: transparent;
-  color: #aaa;
-  border: 1.5px solid #333;
+  color: var(--color-accent, #ffffff);
+  border: 1.5px solid var(--color-accent, #ffffff);
 }
 
-.btn--ghost:hover:not(:disabled) { color: #fff; border-color: #555; }
+.btn--ghost:hover:not(:disabled) { opacity: 0.8; }
 
 .btn--large {
   padding: 16px 40px;
   font-size: 18px;
-  border-radius: 12px;
+  border-radius: 20px;
   width: 100%;
 }
 

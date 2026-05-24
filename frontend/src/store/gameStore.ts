@@ -2,28 +2,37 @@ import { create } from 'zustand';
 import * as api from '../api/client';
 import type { GameState, NodeInfo } from '../types';
 
+export interface Theme {
+  bg: string;
+  accent: string;
+  onAccent: string;
+  text: string;
+}
+
 interface GameStore {
   game: GameState | null;
+  theme: Theme | null;
   isLoading: boolean;
   endError: string | null;
   stepError: string | null;  // shown when actor isn't in the last movie
 
-  fetchGame: (difficulty?: string) => Promise<void>;
-  addNode: (node: NodeInfo) => Promise<void>;
+  fetchGame: (difficulty?: string, theme?: Theme) => Promise<void>;
+  addNode: (node: NodeInfo) => Promise<boolean>;
   removeLastFromPath: () => void;
-  submit: () => Promise<void>;
+  submit: () => Promise<boolean>;
   giveUp: () => Promise<void>;
   resetGame: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
   game: null,
+  theme: null,
   isLoading: false,
   endError: null,
   stepError: null,
 
-  fetchGame: async (difficulty?: string) => {
-    set({ isLoading: true, endError: null });
+  fetchGame: async (difficulty?: string, theme?: Theme) => {
+    set({ isLoading: true, endError: null, stepError: null, theme: theme ?? null });
     try {
       const resp = await api.fetchGame(difficulty);
       set({
@@ -47,7 +56,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   addNode: async (node: NodeInfo) => {
     const { game } = get();
-    if (!game || game.status !== 'playing') return;
+    if (!game || game.status !== 'playing') return false;
 
     // Validate the connection between the last path node and the new node
     const lastNode = game.currentPath[game.currentPath.length - 1];
@@ -61,7 +70,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ? `${newLabel} wasn't in ${lastLabel} — pick someone who was.`
             : `${lastNode.label} wasn't in ${newLabel} — pick a different movie.`;
           set({ stepError: msg });
-          return;
+          return false;
         }
       } catch {
         // Network error — let it through rather than blocking the player
@@ -72,7 +81,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ game: { ...game, currentPath: newPath }, endError: null, stepError: null });
 
     // Only check completion when the target actor is reached
-    if (node.type !== 'actor' || node.id !== game.target.id) return;
+    if (node.type !== 'actor' || node.id !== game.target.id) return false;
 
     try {
       const resp = await api.validatePath(
@@ -82,10 +91,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
 
       if (!resp.valid) {
-        // Path reached the target but chain has invalid connections — show error,
-        // leave all nodes in place so the player can remove and retry
         set({ endError: 'Some connections in your path are invalid. Remove and try again.' });
-        return;
+        return false;
       }
 
       const solveResp = await api.solve(game.source.id, game.target.id);
@@ -99,8 +106,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
+      return true;
     } catch {
-      // Network error — don't block the player
+      return false;
     }
   },
 
@@ -117,7 +125,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   submit: async () => {
     const { game } = get();
-    if (!game) return;
+    if (!game) return false;
 
     // If path ends on a movie, verify target actor was in it before appending
     let finalPath = game.currentPath;
@@ -128,7 +136,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (!connected) {
           const lastLabel = lastNode.year ? `${lastNode.label} (${lastNode.year})` : lastNode.label;
           set({ stepError: `${game.target.label} wasn't in ${lastLabel} — pick a different movie.` });
-          return;
+          return false;
         }
       } catch {
         // Network error — proceed anyway
@@ -151,8 +159,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
+      return true;
     } catch (e: unknown) {
       set({ endError: String(e) });
+      return false;
     }
   },
 

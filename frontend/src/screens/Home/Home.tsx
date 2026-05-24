@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../../store/gameStore';
 import './Home.css';
@@ -11,11 +11,15 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
         <h2 className="modal__title">How to Play</h2>
         <p className="modal__text">
           Connect two actors through shared movies in as few steps as possible.
-          Each step goes: <strong>actor → movie → actor</strong>.
         </p>
         <div className="modal__example">
           <div className="modal__example-title">Example</div>
+          <div className="modal__example-subtitle">Connect Leonardo DiCaprio to Timothée Chalamet</div>
           <div className="modal__example-chain">
+            <span className="chip chip--actor">Leonardo DiCaprio</span>
+            <span className="arrow">→</span>
+            <span className="chip chip--movie">The Departed</span>
+            <span className="arrow">→</span>
             <span className="chip chip--actor">Matt Damon</span>
             <span className="arrow">→</span>
             <span className="chip chip--movie">Interstellar</span>
@@ -23,14 +27,13 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
             <span className="chip chip--actor">Timothée Chalamet</span>
           </div>
           <p className="modal__example-note">
-            That's 2 hops — one of the shortest possible connections!
+            1 actor — can you do it in fewer?
           </p>
         </div>
         <ul className="modal__rules">
           <li>Search for an actor or movie at each step</li>
-          <li>The search is constrained — only valid connections appear</li>
           <li>Tap <strong>Give Up</strong> to see the optimal solution</li>
-          <li>Try to match or beat the optimal path count</li>
+          <li>Try to match or beat the best number of actors</li>
         </ul>
       </div>
     </div>
@@ -38,11 +41,10 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 }
 
 const DIFFICULTIES = [
-  { id: 'random', label: 'Random', desc: 'Fully random path length and actor pool.', color: '#888888' },
-  { id: 'easy', label: 'Easy', desc: 'Connect two Super Famous stars in exactly 2 hops (1 movie).', color: '#10b981' },
-  { id: 'medium', label: 'Medium', desc: 'Connect famous actors in 4 hops or fewer.', color: '#3b82f6' },
-  { id: 'hard', label: 'Hard', desc: 'Connect moderately known actors in 6 hops or fewer.', color: '#f59e0b' },
-  { id: 'expert', label: 'Expert', desc: 'Unrestricted paths and actor pool. Obscure names allowed!', color: '#ef4444' },
+  { id: 'random', label: 'Random', desc: 'Fully random path length and actor pool.',            bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#333333', text: '#222222' },
+  { id: 'easy',   label: 'Easy',   desc: 'Connect two Super Famous stars in exactly 2 hops.',   bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#333333', text: '#222222' },
+  { id: 'medium', label: 'Medium', desc: 'Connect famous actors in 4 hops or fewer.',            bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#333333', text: '#222222' },
+  { id: 'hard',   label: 'Hard',   desc: 'Connect moderately known actors in 6 hops or fewer.',  bg: '#C68DFE', accent: '#E4FF3C', onAccent: '#333333', text: '#222222' },
 ];
 
 export function Home() {
@@ -52,18 +54,32 @@ export function Home() {
   const [difficulty, setDifficulty] = useState<string>('random');
 
   const handleStart = async () => {
-    await fetchGame(difficulty === 'random' ? undefined : difficulty);
+    await fetchGame(difficulty === 'random' ? undefined : difficulty, { bg: activeDiff.bg, accent: activeDiff.accent, onAccent: activeDiff.onAccent, text: activeDiff.text });
+    document.body.style.transition = 'none';
+    document.body.style.background = '#FAF7F2';
     navigate('/game');
   };
 
   const activeDiff = DIFFICULTIES.find((d) => d.id === difficulty) || DIFFICULTIES[0];
 
+  useEffect(() => {
+    document.body.style.background = activeDiff.bg;
+    document.body.style.transition = 'background 0.4s ease';
+  }, [activeDiff.bg]);
+
+  const theme = {
+    '--color-bg': activeDiff.bg,
+    '--color-accent': activeDiff.accent,
+    '--color-on-accent': activeDiff.onAccent,
+    '--color-text': activeDiff.text,
+  } as React.CSSProperties;
+
   return (
-    <div className="home">
+    <div className="home" style={theme}>
       <div className="home__content">
         <h1 className="home__title">Connactor</h1>
         <p className="home__subtitle">
-          Connect two actors through shared movies.
+          Connect two actors through shared movies in as few steps as possible.
         </p>
 
         {endError && <div className="home__error">{endError}</div>}
@@ -82,23 +98,12 @@ export function Home() {
               </button>
             ))}
           </div>
-          <div className="difficulty-info-card">
-            <div className="difficulty-info-card-inner">
-              <span className="difficulty-badge" style={{ borderColor: activeDiff.color, color: activeDiff.color }}>
-                {activeDiff.label.toUpperCase()}
-              </span>
-              <p className="difficulty-info-desc">
-                {activeDiff.desc}
-              </p>
-            </div>
-          </div>
         </div>
 
         <button
           className="btn btn--primary btn--large"
           onClick={handleStart}
           disabled={isLoading}
-          style={{ width: '100%' }}
         >
           {isLoading ? 'Loading Game…' : 'Start Game'}
         </button>

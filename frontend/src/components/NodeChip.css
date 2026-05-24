@@ -2,17 +2,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 28px;
+  font-size: 18px;
+  font-weight: 600;
   white-space: nowrap;
-  max-width: 200px;
 }
 
 .node-chip__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .node-chip__year {
@@ -21,19 +19,19 @@
 }
 
 .node-chip--actor {
-  background: #1a1a2e;
-  color: #e0e0ff;
-  border: 1.5px solid #4a4aff;
+  background: #E4FF3C;
+  color: #333333;
+  border: 1.5px solid #E4FF3C;
 }
 
 .node-chip--movie {
-  background: #1e0a00;
-  color: #ffe0c0;
-  border: 1.5px solid #ff8c00;
+  background: #C68DFE;
+  color: #333333;
+  border: 1.5px solid #C68DFE;
 }
 
 .node-chip--faded {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .node-chip__remove {
