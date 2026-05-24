@@ -5,6 +5,7 @@ export interface NodeInfo {
   year?: string;  // movies only
   popularity?: number; // actors only
   image_path?: string | null; // TMDB profile_path / poster_path; prepend tmdbImage()
+  fame_rank?: number;         // actors only — used for optimal path ranking
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
