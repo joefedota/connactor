@@ -78,6 +78,13 @@
   flex-shrink: 0;
 }
 
+.game-board__photo-tip {
+  padding: 10px 20px 0;
+  font-size: 13px;
+  color: #999999;
+  font-style: italic;
+}
+
 /* Chain */
 .game-board__chain {
   padding: 16px 20px 0;

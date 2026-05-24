@@ -89,16 +89,13 @@
   left: 100%;
   top: 0;
   margin-left: 8px;
-  padding: 4px;
-  background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   z-index: 101;
   pointer-events: none;
 }
 
 .entity-search__option-photo img {
   display: block;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.22));
 }
 
 .entity-search__option-photo--actor img {
