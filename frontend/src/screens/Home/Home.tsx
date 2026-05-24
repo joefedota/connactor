@@ -32,6 +32,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
         </div>
         <ul className="modal__rules">
           <li>Search for an actor or movie at each step</li>
+          <li>Hover an actor (or tap, on mobile) to peek at their photo</li>
           <li>Tap <strong>Give Up</strong> to see the optimal solution</li>
           <li>Try to match or beat the best number of actors</li>
         </ul>

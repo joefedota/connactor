@@ -105,6 +105,10 @@ export function GameBoard() {
         </div>
       </div>
 
+      <div className="game-board__photo-tip">
+        Don't recognize them? Hover an actor to peek at their photo — tap on mobile.
+      </div>
+
       {intermediateNodes.length > 0 && (
         <div className="game-board__chain">
           <div className="game-board__chain-scroll">
