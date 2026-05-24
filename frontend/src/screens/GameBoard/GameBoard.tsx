@@ -75,6 +75,11 @@ export function GameBoard() {
       <header className="game-board__header">
         <div className="game-board__header-left">
           <span className="game-board__logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>Connactor</span>
+          {game.difficulty && (
+            <span className={`game-board__difficulty game-board__difficulty--${game.difficulty}`}>
+              {game.difficulty}
+            </span>
+          )}
         </div>
         <div className="game-board__header-actions">
           {canSubmit && (
@@ -100,7 +105,7 @@ export function GameBoard() {
             className={canClickTarget ? 'game-board__target--clickable' : ''}
             onClick={handleTargetClick}
           >
-            <NodeChip node={target} />
+            <NodeChip node={target} noPhoto={canClickTarget} />
           </div>
         </div>
       </div>
@@ -137,7 +142,7 @@ export function GameBoard() {
           <div className="game-board__finish-row">
             <span className="game-board__finish-label">or finish:</span>
             <div onClick={handleTargetClick} style={{ cursor: 'pointer' }}>
-              <NodeChip node={target} />
+              <NodeChip node={target} noPhoto />
             </div>
           </div>
         )}
