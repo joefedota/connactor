@@ -45,7 +45,7 @@ function buildRandomShareText(
 
 export function Results() {
   const navigate = useNavigate();
-  const { game, theme, resetGame, fetchGame, dailyData } = useGameStore();
+  const { game, theme, resetGame, fetchGame, dailyData, dismissDaily } = useGameStore();
   const [showAllPaths, setShowAllPaths] = useState(false);
 
   useEffect(() => {
@@ -74,6 +74,7 @@ export function Results() {
   };
 
   const handleGoHome = () => {
+    if (game.isDailyChallenge) dismissDaily();
     resetGame();
     navigate('/');
   };
