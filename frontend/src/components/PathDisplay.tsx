@@ -22,7 +22,7 @@ export function PathDisplay({ path, label, dim }: Props) {
             return (
               <div key={`${node.id}-${i}`} className="path-display__movie-row">
                 <span className="path-display__connector" aria-hidden="true">↓</span>
-                <NodeChip node={node} noPhoto />
+                <NodeChip node={node} />
               </div>
             );
           }
@@ -32,7 +32,7 @@ export function PathDisplay({ path, label, dim }: Props) {
               key={`${node.id}-${i}`}
               className={isEndpoint ? 'path-display__actor-row' : 'path-display__actor-row path-display__actor-row--indented'}
             >
-              <NodeChip node={node} noPhoto />
+              <NodeChip node={node} />
             </div>
           );
         })}
