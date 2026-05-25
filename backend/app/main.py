@@ -362,7 +362,7 @@ async def post_hint(request: Request, body: HintRequest):
                 WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
                   OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
                 WITH nodes(p)[1] AS m
-                WHERE toString(m.movie_id) NOT IN $excluded
+                WHERE NOT toString(m.movie_id) IN $excluded
                 WITH DISTINCT m ORDER BY m.vote_count DESC
                 RETURN {type: 'movie', id: toString(m.movie_id), label: m.title,
                         year: toString(m.year), image_path: m.poster_path} AS hint
@@ -379,7 +379,7 @@ async def post_hint(request: Request, body: HintRequest):
                     """
                     MATCH (a:Actor {person_id: $last_id})-[:APPEARED_IN]->(m:Movie)
                     WHERE coalesce(m.vote_count, 0) >= 100 AND NOT 99 IN coalesce(m.genre_ids, [])
-                    AND toString(m.movie_id) NOT IN $excluded
+                    AND NOT toString(m.movie_id) IN $excluded
                     RETURN {type: 'movie', id: toString(m.movie_id), label: m.title,
                             year: toString(m.year), image_path: m.poster_path} AS hint
                     ORDER BY m.popularity DESC LIMIT 1
@@ -396,7 +396,7 @@ async def post_hint(request: Request, body: HintRequest):
                       p = allShortestPaths((a)-[:APPEARED_IN*..12]-(t:Actor {person_id: $target_id}))
                 WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
                   OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
-                AND toString(a.person_id) NOT IN $excluded
+                AND NOT toString(a.person_id) IN $excluded
                 WITH a, length(p) AS hops
                 ORDER BY hops ASC, a.fame_rank ASC
                 LIMIT 1
@@ -414,7 +414,7 @@ async def post_hint(request: Request, body: HintRequest):
                 result = await session.run(
                     """
                     MATCH (m:Movie {movie_id: $last_id})<-[:APPEARED_IN]-(a:Actor)
-                    WHERE toString(a.person_id) NOT IN $excluded
+                    WHERE NOT toString(a.person_id) IN $excluded
                     RETURN {type: 'actor', id: toString(a.person_id), label: a.name,
                             popularity: a.popularity, image_path: a.profile_path,
                             fame_rank: a.fame_rank} AS hint
