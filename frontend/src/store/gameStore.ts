@@ -107,8 +107,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { game } = get();
     if (!game) return;
     try {
+      const path_ids = game.currentPath.map((n) => n.id);
       if (game.isDailyChallenge && game.puzzleId) {
-        const resp = await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs });
+        // Optimistically mark completed before API returns so navigating to
+        // /daily immediately after winning doesn't re-start the game.
+        const dOpt = get().dailyData;
+        if (dOpt) set({
+          dailyData: {
+            ...dOpt,
+            already_completed: true,
+            completion: { hops, time_ms: timeMs ?? null, completed_at: new Date().toISOString() },
+          },
+        });
+
+        const resp = await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs, path_ids });
         const d = get().dailyData;
         if (d) set({
           dailyData: {
@@ -128,6 +140,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           optimal_hops: resolvedOptimalHops,
           hops,
           time_ms: timeMs,
+          path_ids,
         });
       }
     } catch {

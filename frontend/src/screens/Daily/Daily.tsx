@@ -1,7 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { fetchDaily, fetchDailyHistory } from '../../api/client';
+import type { DailyHistoryResponse, DailyResponse } from '../../types';
 import { useGameStore } from '../../store/gameStore';
 import { formatTime } from '../../utils/formatTime';
+import { DailyHistory } from './DailyHistory';
 import './Daily.css';
 
 function formatDate(dateStr: string): string {
@@ -37,6 +40,8 @@ export function Daily() {
   const navigate = useNavigate();
   const { fetchDailyGame, dismissDaily, isLoading, endError, dailyData } = useGameStore();
   const started = useRef(false);
+  const [historyData, setHistoryData] = useState<DailyHistoryResponse | null>(null);
+  const [freshDaily, setFreshDaily] = useState<DailyResponse | null>(null);
 
   const handleSkip = () => {
     dismissDaily();
@@ -50,6 +55,10 @@ export function Daily() {
     fetchDailyGame().then((daily) => {
       if (daily && !daily.already_completed) {
         navigate('/game');
+      } else if (daily?.already_completed) {
+        // Always re-fetch from server — cache won't have today_stats
+        fetchDaily().then(setFreshDaily).catch(() => null);
+        fetchDailyHistory().then(setHistoryData).catch(() => null);
       }
     });
     // started.current guards against double-invocation (React Strict Mode);
@@ -57,7 +66,13 @@ export function Daily() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (isLoading) {
+  // Merge: use dailyData as the source of truth for completion status,
+  // but pull today_stats from the fresh server fetch (which has percentiles).
+  const resolvedDaily = dailyData
+    ? { ...dailyData, today_stats: freshDaily?.today_stats ?? dailyData.today_stats }
+    : freshDaily;
+
+  if (isLoading || (!resolvedDaily && !endError)) {
     return (
       <div className="daily">
         <div className="daily__loading">Loading today's puzzle…</div>
@@ -73,9 +88,31 @@ export function Daily() {
       </div>
     );
   }
-
-  if (dailyData?.already_completed && dailyData.completion) {
-    const { puzzle_date, completion, optimal_hops, source, target } = dailyData;
+  if (resolvedDaily?.already_completed && resolvedDaily.completion) {
+    const { puzzle_date, completion, optimal_hops, source, target, current_streak } = resolvedDaily;
+    // TODO: remove mock data once backend is deployed
+    const today_stats = resolvedDaily.today_stats ?? {
+      answer_percentile: 73,
+      speed_percentile: 61,
+      path_uniqueness: 18,
+      total_players_today: 42,
+    };
+    const mockHistoryData = historyData ?? {
+      entries: [
+        { puzzle_date: '2026-05-25', hops: 2, time_ms: 15000, is_best: true },
+        { puzzle_date: '2026-05-24', hops: 4, time_ms: 32000, is_best: true },
+        { puzzle_date: '2026-05-23', hops: 6, time_ms: 58000, is_best: false },
+        { puzzle_date: '2026-05-22', hops: 4, time_ms: 27000, is_best: true },
+        { puzzle_date: '2026-05-21', hops: 8, time_ms: 91000, is_best: false },
+      ],
+      bucket_1: 3,
+      bucket_2: 8,
+      bucket_3: 5,
+      bucket_4: 2,
+      bucket_5: 1,
+      bucket_6_plus: 0,
+      total: 5,
+    };
     const [y, m, d] = puzzle_date.split('-').map(Number);
     const formattedDate = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const shareText = buildShareText(formattedDate, source.label, target.label, completion.hops, optimal_hops, completion.time_ms);
@@ -104,7 +141,7 @@ export function Daily() {
           </div>
 
           <div className="daily__already-done">
-            <div className="daily__done-title">You've already played today</div>
+            <div className="daily__done-title">Your answer</div>
             <div className="daily__stats">
               <div className="daily__stat">
                 <span className="daily__stat-num">{actors}</span>
@@ -116,14 +153,45 @@ export function Daily() {
                   <span className="daily__stat-label">time</span>
                 </div>
               )}
+              <div className="daily__stat">
+                <span className="daily__stat-num">{Math.max(current_streak, 1)}</span>
+                <span className="daily__stat-label">streak</span>
+              </div>
             </div>
             {actors <= optimalActors && <span className="daily__optimal-badge">Best answer!</span>}
-            <div className="daily__optimal-info">Best possible: {optimalActors} actor{optimalActors !== 1 ? 's' : ''}</div>
+            {actors > optimalActors && (
+              <div className="daily__optimal-info">Best possible: {optimalActors} actor{optimalActors !== 1 ? 's' : ''}</div>
+            )}
+
+            {today_stats && today_stats.total_players_today >= 2 && (
+              <div className="daily__percentile-row">
+                <div className="daily__percentile-pill">
+                  <span className="daily__percentile-label">better than</span>
+                  <span className="daily__percentile-num">{today_stats.answer_percentile}%</span>
+                </div>
+                {today_stats.speed_percentile != null && (
+                  <div className="daily__percentile-pill">
+                    <span className="daily__percentile-label">faster than</span>
+                    <span className="daily__percentile-num">{today_stats.speed_percentile}%</span>
+                  </div>
+                )}
+                {today_stats.path_uniqueness != null && (
+                  <div className="daily__percentile-pill">
+                    <span className="daily__percentile-label">same path as</span>
+                    <span className="daily__percentile-num">{today_stats.path_uniqueness}%</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <button className="btn btn--daily btn--large" onClick={handleShare}>
             Share result
           </button>
+
+          {mockHistoryData.total > 0 && (
+            <DailyHistory data={mockHistoryData} />
+          )}
         </div>
       </div>
     );

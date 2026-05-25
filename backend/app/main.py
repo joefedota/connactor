@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import logging
+import math
 import time
 import uuid  # used in /game for ephemeral game_id
 from contextlib import asynccontextmanager
@@ -34,7 +36,10 @@ from app.models import (
     CompleteRequest,
     CompleteResponse,
     CompletionInfo,
+    DailyHistoryEntry,
+    DailyHistoryResponse,
     DailyResponse,
+    DailyStats,
     Difficulty,
     GameResponse,
     NodeInfo,
@@ -626,6 +631,39 @@ async def get_daily(request: Request):
     )
     logger.info("TIMING /daily parallel(neo4j+pg_completion)=%.0fms", (time.perf_counter() - t1) * 1000)
 
+    # Compute today's percentile stats when the user has already completed.
+    today_stats: Optional[DailyStats] = None
+    if comp is not None:
+        async with get_session() as session:
+            stats_row = await session.execute(
+                text(
+                    """
+                    SELECT
+                        COUNT(*) AS total,
+                        COUNT(*) FILTER (WHERE hops > :user_hops) AS better_than,
+                        COUNT(*) FILTER (WHERE time_ms IS NOT NULL) AS has_time,
+                        COUNT(*) FILTER (WHERE time_ms > :user_time AND time_ms IS NOT NULL) AS slower_than,
+                        COUNT(*) FILTER (WHERE path_ids IS NOT NULL AND path_ids::text = :user_path) AS same_path
+                    FROM game_completions
+                    WHERE puzzle_id = :pid
+                    """
+                ),
+                {
+                    "pid": puzzle_id,
+                    "user_hops": comp.hops,
+                    "user_time": comp.time_ms if comp.time_ms is not None else -1,
+                    "user_path": json.dumps(comp.path_ids) if hasattr(comp, "path_ids") and comp.path_ids else "[]",
+                },
+            )
+            s = stats_row.first()
+        if s and s.total > 0:
+            today_stats = DailyStats(
+                answer_percentile=math.floor(s.better_than / s.total * 100),
+                speed_percentile=math.floor(s.slower_than / s.has_time * 100) if s.has_time and comp.time_ms is not None else None,
+                path_uniqueness=math.floor(s.same_path / s.total * 100) if s.same_path else None,
+                total_players_today=s.total,
+            )
+
     return DailyResponse(
         puzzle_date=today.isoformat(),
         puzzle_id=puzzle_id,
@@ -639,6 +677,7 @@ async def get_daily(request: Request):
             completed_at=comp.completed_at.isoformat(),
         ) if comp else None,
         current_streak=streak,
+        today_stats=today_stats,
     )
 
 
@@ -700,16 +739,31 @@ async def post_complete(request: Request, body: CompleteRequest):
                 completed_at=existing_row.completed_at.isoformat(),
             )
 
-        new_row = await session.execute(
-            text(
-                """
-                INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms)
-                VALUES (:uid, :pid, :hops, :time_ms)
-                RETURNING completion_id, completed_at
-                """
-            ),
-            {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms},
-        )
+        path_ids_json = json.dumps(body.path_ids) if body.path_ids else None
+        try:
+            new_row = await session.execute(
+                text(
+                    """
+                    INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms, path_ids)
+                    VALUES (:uid, :pid, :hops, :time_ms, :path_ids::jsonb)
+                    RETURNING completion_id, completed_at
+                    """
+                ),
+                {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms, "path_ids": path_ids_json},
+            )
+        except Exception:
+            # path_ids column may not exist yet (migration pending) — fall back without it
+            await session.rollback()
+            new_row = await session.execute(
+                text(
+                    """
+                    INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms)
+                    VALUES (:uid, :pid, :hops, :time_ms)
+                    RETURNING completion_id, completed_at
+                    """
+                ),
+                {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms},
+            )
         inserted = new_row.first()
         await session.commit()
 
@@ -719,4 +773,58 @@ async def post_complete(request: Request, body: CompleteRequest):
         hops=body.hops,
         time_ms=body.time_ms,
         completed_at=inserted.completed_at.isoformat(),
+    )
+
+
+@app.get("/daily/history", response_model=DailyHistoryResponse)
+async def get_daily_history(request: Request):
+    user_id: str = request.state.user_id
+    async with get_session() as session:
+        rows = await session.execute(
+            text(
+                """
+                SELECT
+                    p.scheduled_date,
+                    gc.hops,
+                    gc.time_ms,
+                    p.optimal_hops
+                FROM game_completions gc
+                JOIN puzzles p ON p.puzzle_id = gc.puzzle_id
+                WHERE gc.user_id = :uid
+                  AND p.is_daily = TRUE
+                  AND p.scheduled_date IS NOT NULL
+                ORDER BY p.scheduled_date DESC
+                """
+            ),
+            {"uid": user_id},
+        )
+        data = rows.fetchall()
+
+    entries = [
+        DailyHistoryEntry(
+            puzzle_date=row.scheduled_date.isoformat(),
+            hops=row.hops,
+            time_ms=row.time_ms,
+            is_best=row.hops <= row.optimal_hops,
+        )
+        for row in data
+    ]
+
+    # Bucket by actor count: actors = ceil(hops/2) - 1
+    buckets = [0, 0, 0, 0, 0, 0]  # indices 0-4 = 1-5 actors, index 5 = 6+
+    for entry in entries:
+        actors = math.ceil(entry.hops / 2) - 1
+        idx = min(actors - 1, 5)
+        if idx >= 0:
+            buckets[idx] += 1
+
+    return DailyHistoryResponse(
+        entries=entries,
+        bucket_1=buckets[0],
+        bucket_2=buckets[1],
+        bucket_3=buckets[2],
+        bucket_4=buckets[3],
+        bucket_5=buckets[4],
+        bucket_6_plus=buckets[5],
+        total=len(entries),
     )

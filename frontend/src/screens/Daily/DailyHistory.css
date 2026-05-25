@@ -1,0 +1,140 @@
+.daily-history {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.daily-history__section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #aaa;
+  text-align: left;
+}
+
+/* ── Bar chart ─────────────────────────────── */
+.daily-history__chart {
+  background: #fff;
+  border: 1.5px solid #e8e4dc;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.daily-history__bar-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 1.5rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.daily-history__bar-label {
+  font-size: 0.75rem;
+  color: #666;
+  font-weight: 600;
+  text-align: right;
+}
+
+.daily-history__bar-track {
+  background: #f0ece4;
+  border-radius: 99px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.daily-history__bar-fill {
+  height: 100%;
+  background: #C68DFE;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+.daily-history__bar-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #444;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Entry list ─────────────────────────────── */
+.daily-history__entries {
+  background: #fff;
+  border: 1.5px solid #e8e4dc;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.daily-history__entry {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #f0ece4;
+  flex-wrap: wrap;
+}
+
+.daily-history__entry:last-child {
+  border-bottom: none;
+}
+
+.daily-history__entry-date {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #555;
+  min-width: 4.5rem;
+}
+
+.daily-history__entry-dots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+}
+
+.daily-history__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.daily-history__dot--yellow {
+  background: #E4FF3C;
+  border: 1.5px solid #cce000;
+}
+
+.daily-history__dot--purple {
+  background: #C68DFE;
+  border: 1.5px solid #a866e8;
+}
+
+.daily-history__entry-actors {
+  font-size: 0.75rem;
+  color: #888;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.daily-history__entry-time {
+  font-size: 0.75rem;
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.daily-history__best-badge {
+  background: #E4FF3C;
+  color: #333;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 99px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}

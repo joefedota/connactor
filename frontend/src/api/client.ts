@@ -2,6 +2,7 @@ import type {
   AutocompleteResponse,
   CompleteRequest,
   CompleteResponse,
+  DailyHistoryResponse,
   DailyResponse,
   GameResponse,
   SolveResponse,
@@ -87,4 +88,8 @@ export function submitComplete(body: CompleteRequest): Promise<CompleteResponse>
     credentials: 'include',
     body: JSON.stringify(body),
   });
+}
+
+export function fetchDailyHistory(): Promise<DailyHistoryResponse> {
+  return request('/daily/history', { credentials: 'include' });
 }
