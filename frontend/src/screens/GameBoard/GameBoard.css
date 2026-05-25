@@ -9,15 +9,14 @@
 }
 
 .game-board__header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid #e5e5e5;
 }
 
 .game-board__timer {
-  text-align: center;
   font-size: 14px;
   font-weight: 600;
   color: #888888;
