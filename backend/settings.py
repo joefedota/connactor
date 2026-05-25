@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
 
     # Cost + usage report (scripts/cost_report.py)
-    billing_dataset: str = "billing_export"
+    billing_dataset: str = "connactor_usage"
     billing_table: str = "gcp_billing_export_resource_v1_017EE0_4F04E9_9FCF85"
     cloudflare_api_token: str = ""
     cloudflare_account_id: str = ""
