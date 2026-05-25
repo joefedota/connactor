@@ -185,3 +185,16 @@
 .daily__error {
   color: #c0392b;
 }
+
+@media (max-width: 600px) {
+  .daily__back {
+    position: static;
+    align-self: flex-start;
+    margin-bottom: 1.5rem;
+  }
+  .daily {
+    padding-top: 1.5rem;
+  }
+}
+
+
