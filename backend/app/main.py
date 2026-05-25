@@ -552,6 +552,24 @@ async def _compute_streak(session, user_id: str) -> int:
     return streak
 
 
+async def _get_completion_and_streak(user_id: str, puzzle_id: str) -> tuple:
+    """Fetch completion record and streak in a single Postgres session."""
+    async with get_session() as session:
+        comp_row = await session.execute(
+            text(
+                """
+                SELECT hops, time_ms, completed_at
+                FROM game_completions
+                WHERE user_id = :uid AND puzzle_id = :pid
+                """
+            ),
+            {"uid": user_id, "pid": puzzle_id},
+        )
+        comp = comp_row.first()
+        streak = await _compute_streak(session, user_id)
+    return comp, streak
+
+
 @app.get("/daily", response_model=DailyResponse)
 async def get_daily(request: Request):
     today = datetime.date.today()
@@ -575,24 +593,15 @@ async def get_daily(request: Request):
         raise HTTPException(status_code=404, detail="No daily puzzle available yet.")
 
     puzzle_id = str(puzzle.puzzle_id)
-    source_node, target_node = await asyncio.gather(
-        _fetch_actor_node(driver, puzzle.source_id),
-        _fetch_actor_node(driver, puzzle.target_id),
-    )
 
-    async with get_session() as session:
-        comp_row = await session.execute(
-            text(
-                """
-                SELECT hops, time_ms, completed_at
-                FROM game_completions
-                WHERE user_id = :uid AND puzzle_id = :pid
-                """
-            ),
-            {"uid": user_id, "pid": puzzle_id},
-        )
-        comp = comp_row.first()
-        streak = await _compute_streak(session, user_id)
+    # Neo4j actor fetches and Postgres completion+streak run in parallel.
+    (source_node, target_node), (comp, streak) = await asyncio.gather(
+        asyncio.gather(
+            _fetch_actor_node(driver, puzzle.source_id),
+            _fetch_actor_node(driver, puzzle.target_id),
+        ),
+        _get_completion_and_streak(user_id, puzzle_id),
+    )
 
     return DailyResponse(
         puzzle_date=today.isoformat(),
