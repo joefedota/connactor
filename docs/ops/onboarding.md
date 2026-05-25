@@ -10,13 +10,22 @@ Steps for the project owner (Joe) to grant access, and for the new developer to 
 Go to **github.com/joefedota/connactor → Settings → Collaborators → Add people** and invite by GitHub username. Set role to **Write** (can push branches, open PRs) or **Admin** (can also manage settings).
 
 ### Google Cloud
+
+> **Note:** Direct Owner grants via CLI are blocked by the org policy for external accounts. Use Editor + explicit Secret Manager access instead. Owner can still be granted via the GCP Console (it sends an invitation email).
+
 ```bash
+# Core project access (deploy, Cloud Run, GCS, Artifact Registry, Compute Engine, logs)
 gcloud projects add-iam-policy-binding connactor-497019 \
   --member="user:THEIR_EMAIL@gmail.com" \
-  --role="roles/owner"
+  --role="roles/editor"
+
+# Secret Manager — Editor cannot read secret values without this
+gcloud projects add-iam-policy-binding connactor-497019 \
+  --member="user:THEIR_EMAIL@gmail.com" \
+  --role="roles/secretmanager.secretAccessor"
 ```
 
-This gives access to: Cloud Run, Artifact Registry, Secret Manager, Cloud Scheduler, Compute Engine (Neo4j VM), GCS, and logs.
+This gives access to: Cloud Run, Artifact Registry, Secret Manager (read), Cloud Scheduler, Compute Engine (Neo4j VM), GCS, and logs.
 
 ---
 
