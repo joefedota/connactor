@@ -42,10 +42,10 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 }
 
 const DIFFICULTIES = [
-  { id: 'random', label: 'Random' },
-  { id: 'easy',   label: 'Easy'   },
-  { id: 'medium', label: 'Medium' },
-  { id: 'hard',   label: 'Hard'   },
+  { id: 'random', label: 'Random', desc: 'Any difficulty' },
+  { id: 'easy',   label: 'Easy',   desc: 'Hollywood A-listers' },
+  { id: 'medium', label: 'Medium', desc: 'Well-known actors' },
+  { id: 'hard',   label: 'Hard',   desc: 'Character actors' },
 ];
 
 const THEME = { bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' };
@@ -54,6 +54,7 @@ export function Home() {
   const navigate = useNavigate();
   const { fetchGame, endError } = useGameStore();
   const [showHowTo, setShowHowTo] = useState(false);
+  const [view, setView] = useState<'menu' | 'difficulty'>('menu');
   const [loadingDiff, setLoadingDiff] = useState<string | null>(null);
 
   const handleStart = async (diffId: string) => {
@@ -67,43 +68,61 @@ export function Home() {
   return (
     <div className="home">
       <div className="home__content">
-        <h1 className="home__title">Connactor</h1>
-        <p className="home__subtitle">
-          Connect two actors through shared movies in as few steps as possible.
-        </p>
 
-        {endError && <div className="home__error">{endError}</div>}
+        {view === 'menu' ? (
+          <>
+            <h1 className="home__title">Connactor</h1>
+            <p className="home__subtitle">
+              Connect two actors through shared movies in as few steps as possible.
+            </p>
 
-        <div className="difficulty-container">
-          <div className="difficulty-label">Select Difficulty</div>
-          <div className="difficulty-tabs">
-            {DIFFICULTIES.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                className={`difficulty-tab ${loadingDiff === d.id ? 'is-loading' : ''}`}
-                disabled={loadingDiff !== null}
-                onClick={() => handleStart(d.id)}
-              >
-                {loadingDiff === d.id ? '…' : d.label}
-              </button>
-            ))}
-          </div>
-        </div>
+            {endError && <div className="home__error">{endError}</div>}
 
-        <button
-          className="btn btn--ghost"
-          onClick={() => setShowHowTo(true)}
-        >
-          How to Play
-        </button>
+            <button
+              className="btn btn--primary btn--large"
+              onClick={() => setView('difficulty')}
+            >
+              New Game
+            </button>
 
-        <button
-          className="home__daily-link"
-          onClick={() => navigate('/daily')}
-        >
-          ↩ Daily Challenge
-        </button>
+            <button
+              className="btn btn--ghost"
+              onClick={() => setShowHowTo(true)}
+            >
+              How to Play
+            </button>
+
+            <button
+              className="home__daily-link"
+              onClick={() => navigate('/daily')}
+            >
+              ↩ Daily Challenge
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="home__back" onClick={() => setView('menu')}>
+              ← Back
+            </button>
+
+            <h2 className="home__picker-title">Choose Difficulty</h2>
+
+            <div className="home__difficulty-list">
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.id}
+                  className={`home__diff-btn ${loadingDiff === d.id ? 'is-loading' : ''}`}
+                  disabled={loadingDiff !== null}
+                  onClick={() => handleStart(d.id)}
+                >
+                  <span className="home__diff-label">{loadingDiff === d.id ? 'Loading…' : d.label}</span>
+                  <span className="home__diff-desc">{d.desc}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
       </div>
 
       {showHowTo && <HowToPlayModal onClose={() => setShowHowTo(false)} />}
