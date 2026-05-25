@@ -87,7 +87,7 @@ export function Daily() {
             <div className="daily__result">
               <span className="daily__result-num">{actors}</span>
               <span className="daily__result-label">actor{actors !== 1 ? 's' : ''}</span>
-              {actors <= optimalActors && <span className="daily__optimal-badge">Optimal!</span>}
+              {actors <= optimalActors && <span className="daily__optimal-badge">Best answer!</span>}
             </div>
             <div className="daily__optimal-info">Best possible: {optimalActors} actor{optimalActors !== 1 ? 's' : ''}</div>
           </div>

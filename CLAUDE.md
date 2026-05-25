@@ -43,6 +43,10 @@ https://github.com/joefedota/connactor
 ## Project board
 https://github.com/joefedota/connactor/projects
 
+## Product copy rules
+
+- **Never use the word "optimal"** in any user-facing text (UI labels, copy, tooltips, messages). Use **"best answer"** instead.
+
 ## Code style rules
 
 - **No imports in function scope** unless absolutely necessary (e.g. breaking a circular import). All imports go at the top of the file.
