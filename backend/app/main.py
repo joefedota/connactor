@@ -8,21 +8,33 @@ Endpoints:
   GET  /autocomplete?q=...&type=actor|movie     — prefix search (unconstrained)
   GET  /autocomplete/neighbors?node_id=...&type=actor|movie  — neighbors of a node
   GET  /connected?a=...&b=...                   — edge existence check
+  GET  /daily                                   — today's daily challenge puzzle
+  POST /complete                                — record any game completion
 """
 from __future__ import annotations
 
-import random
-import uuid
+import asyncio
+import datetime
+import logging
+import time
+import uuid  # used in /game for ephemeral game_id
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j.exceptions import ClientError
+from sqlalchemy import text
 
 from app.db import get_driver
+from app.middleware.user_identity import UserIdentityMiddleware
+from app.pg import get_session
 from app.models import (
     AutocompleteResponse,
+    CompleteRequest,
+    CompleteResponse,
+    CompletionInfo,
+    DailyResponse,
     Difficulty,
     GameResponse,
     NodeInfo,
@@ -93,11 +105,24 @@ async def lifespan(app: FastAPI):
     await driver.close()
 
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Connactor API", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def _log_request_timing(request: Request, call_next):
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - t0) * 1000
+    logger.info("TIMING %s %s %d %.0fms", request.method, request.url.path, response.status_code, ms)
+    return response
+
+app.add_middleware(UserIdentityMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "https://connactor.com", "https://www.connactor.com"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -131,12 +156,14 @@ async def get_game(
     min_rank, max_rank = _DIFFICULTY_RANK_RANGE[difficulty] if difficulty else _DEFAULT_RANK_RANGE
     driver = request.app.state.neo4j
 
+    t0 = time.perf_counter()
     async with driver.session() as session:
         # Pick two random actors from the difficulty's rank tier in one indexed query,
         # then verify a path exists between them (capped at 12 hops). Most popular pairs
         # are 2-4 hops apart so this resolves in a single attempt; retry only if we
         # happen to pick a disconnected pair.
-        for _ in range(MAX_GAME_ATTEMPTS):
+        for attempt in range(MAX_GAME_ATTEMPTS):
+            t1 = time.perf_counter()
             result = await session.run(
                 f"""
                 MATCH (a:Actor) WHERE a.fame_rank >= $min_rank AND a.fame_rank < $max_rank
@@ -150,11 +177,13 @@ async def get_game(
                 max_rank=max_rank,
             )
             record = await result.single()
+            logger.info("TIMING /game attempt=%d neo4j=%.0fms", attempt + 1, (time.perf_counter() - t1) * 1000)
             if record is None:
                 continue
 
             source = record["source"]
             target = record["target"]
+            logger.info("TIMING /game total=%.0fms difficulty=%s", (time.perf_counter() - t0) * 1000, difficulty)
             return GameResponse(
                 game_id=str(uuid.uuid4()),
                 source=NodeInfo(
@@ -279,7 +308,7 @@ async def post_solve(request: Request, body: SolveRequest):
             WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
               OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
             RETURN [n IN nodes(p) | CASE labels(n)[0]
-                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path}
+                WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path, fame_rank: n.fame_rank}
                 WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
             END] AS path,
             length(p) AS hops
@@ -298,6 +327,16 @@ async def post_solve(request: Request, body: SolveRequest):
         [NodeInfo(**node) for node in rec["path"]]
         for rec in records
     ]
+    # Sort paths by average fame_rank of intermediate actors ascending (lower rank = more famous).
+    # Intermediate actors = all actors except the first and last in the path.
+    def _path_fame_key(path: list[NodeInfo]) -> float:
+        intermediate = [n for n in path[1:-1] if n.type == "actor"]
+        if not intermediate:
+            return 0.0
+        ranks = [n.fame_rank for n in intermediate if n.fame_rank is not None]
+        return sum(ranks) / len(ranks) if ranks else float("inf")
+
+    paths.sort(key=_path_fame_key)
     return SolveResponse(hop_count=hop_count, paths=paths)
 
 
@@ -314,6 +353,7 @@ async def get_autocomplete(
 
     driver = request.app.state.neo4j
 
+    t0 = time.perf_counter()
     async with driver.session() as session:
         try:
             if type == "actor":
@@ -348,6 +388,7 @@ async def get_autocomplete(
             # Malformed Lucene query (e.g. user typed only escape-special chars) —
             # return empty rather than 500.
             return AutocompleteResponse(results=[])
+    logger.info("TIMING /autocomplete type=%s neo4j=%.0fms", type, (time.perf_counter() - t0) * 1000)
 
     results = []
     for rec in records:
@@ -381,6 +422,7 @@ async def get_autocomplete_neighbors(
 ):
     driver = request.app.state.neo4j
 
+    t0 = time.perf_counter()
     async with driver.session() as session:
         if type == "actor":
             # node_id is a movie — fetch its actors
@@ -404,6 +446,7 @@ async def get_autocomplete_neighbors(
             """
         result = await session.run(cypher, node_id=int(node_id), q=q, limit=limit)
         records = await result.data()
+    logger.info("TIMING /autocomplete/neighbors type=%s neo4j=%.0fms", type, (time.perf_counter() - t0) * 1000)
 
     results = []
     for rec in records:
@@ -465,3 +508,214 @@ async def health(request: Request):
         "movies": r2["n"],
         "edges": r3["n"],
     }
+
+
+async def _fetch_actor_node(driver, person_id: int) -> NodeInfo:
+    async with driver.session() as session:
+        result = await session.run(
+            "MATCH (a:Actor {person_id: $id}) RETURN a",
+            id=person_id,
+        )
+        record = await result.single()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Actor {person_id} not found.")
+    node = record["a"]
+    return NodeInfo(
+        type="actor",
+        id=str(node["person_id"]),
+        label=node["name"],
+        popularity=node.get("popularity"),
+        image_path=node.get("profile_path"),
+    )
+
+
+async def _compute_streak(session, user_id: str) -> int:
+    """Count consecutive daily completions ending today or yesterday (UTC).
+
+    Counts from yesterday when today hasn't been played yet so the streak
+    doesn't drop to 0 mid-day.
+    """
+    rows = await session.execute(
+        text(
+            """
+            SELECT p.scheduled_date
+            FROM game_completions gc
+            JOIN puzzles p ON p.puzzle_id = gc.puzzle_id
+            WHERE gc.user_id = :uid
+              AND p.is_daily = TRUE
+              AND p.scheduled_date IS NOT NULL
+            ORDER BY p.scheduled_date DESC
+            """
+        ),
+        {"uid": user_id},
+    )
+    dates = [row[0] for row in rows]
+    if not dates:
+        return 0
+
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    # If the most recent play was before yesterday the streak is broken.
+    if dates[0] not in (today, yesterday):
+        return 0
+
+    streak = 0
+    expected = dates[0]
+    for d in dates:
+        if d == expected:
+            streak += 1
+            expected -= datetime.timedelta(days=1)
+        else:
+            break
+    return streak
+
+
+async def _get_completion_and_streak(user_id: str, puzzle_id: str) -> tuple:
+    """Fetch completion record and streak in a single Postgres session."""
+    async with get_session() as session:
+        comp_row = await session.execute(
+            text(
+                """
+                SELECT hops, time_ms, completed_at
+                FROM game_completions
+                WHERE user_id = :uid AND puzzle_id = :pid
+                """
+            ),
+            {"uid": user_id, "pid": puzzle_id},
+        )
+        comp = comp_row.first()
+        streak = await _compute_streak(session, user_id)
+    return comp, streak
+
+
+@app.get("/daily", response_model=DailyResponse)
+async def get_daily(request: Request):
+    today = datetime.date.today()
+    driver = request.app.state.neo4j
+    user_id: str = request.state.user_id
+
+    t0 = time.perf_counter()
+    async with get_session() as session:
+        row = await session.execute(
+            text(
+                """
+                SELECT puzzle_id, source_id, target_id, optimal_hops
+                FROM puzzles
+                WHERE is_daily = TRUE AND scheduled_date = :today
+                """
+            ),
+            {"today": today},
+        )
+        puzzle = row.first()
+    logger.info("TIMING /daily pg_puzzle=%.0fms", (time.perf_counter() - t0) * 1000)
+
+    if not puzzle:
+        raise HTTPException(status_code=404, detail="No daily puzzle available yet.")
+
+    puzzle_id = str(puzzle.puzzle_id)
+
+    # Neo4j actor fetches and Postgres completion+streak run in parallel.
+    t1 = time.perf_counter()
+    (source_node, target_node), (comp, streak) = await asyncio.gather(
+        asyncio.gather(
+            _fetch_actor_node(driver, puzzle.source_id),
+            _fetch_actor_node(driver, puzzle.target_id),
+        ),
+        _get_completion_and_streak(user_id, puzzle_id),
+    )
+    logger.info("TIMING /daily parallel(neo4j+pg_completion)=%.0fms", (time.perf_counter() - t1) * 1000)
+
+    return DailyResponse(
+        puzzle_date=today.isoformat(),
+        puzzle_id=puzzle_id,
+        source=source_node,
+        target=target_node,
+        optimal_hops=puzzle.optimal_hops,
+        already_completed=comp is not None,
+        completion=CompletionInfo(
+            hops=comp.hops,
+            time_ms=comp.time_ms,
+            completed_at=comp.completed_at.isoformat(),
+        ) if comp else None,
+        current_streak=streak,
+    )
+
+
+@app.post("/complete", response_model=CompleteResponse)
+async def post_complete(request: Request, body: CompleteRequest):
+    user_id: str = request.state.user_id
+
+    if body.puzzle_id is None:
+        if body.source_id is None or body.target_id is None or body.optimal_hops is None:
+            raise HTTPException(
+                status_code=422,
+                detail="source_id, target_id, and optimal_hops are required when puzzle_id is not provided.",
+            )
+
+    async with get_session() as session:
+        if body.puzzle_id:
+            pid_row = await session.execute(
+                text("SELECT puzzle_id FROM puzzles WHERE puzzle_id = :pid"),
+                {"pid": body.puzzle_id},
+            )
+            if not pid_row.first():
+                raise HTTPException(status_code=404, detail="Puzzle not found.")
+            puzzle_id = body.puzzle_id
+        else:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO puzzles (source_id, target_id, optimal_hops)
+                    VALUES (:src, :tgt, :hops)
+                    ON CONFLICT (source_id, target_id) DO NOTHING
+                    """
+                ),
+                {"src": int(body.source_id), "tgt": int(body.target_id), "hops": body.optimal_hops},
+            )
+            pid_row = await session.execute(
+                text("SELECT puzzle_id FROM puzzles WHERE source_id = :src AND target_id = :tgt"),
+                {"src": int(body.source_id), "tgt": int(body.target_id)},
+            )
+            puzzle_id = str(pid_row.scalar_one())
+
+        existing = await session.execute(
+            text(
+                """
+                SELECT completion_id, hops, time_ms, completed_at
+                FROM game_completions
+                WHERE user_id = :uid AND puzzle_id = :pid
+                """
+            ),
+            {"uid": user_id, "pid": puzzle_id},
+        )
+        existing_row = existing.first()
+        if existing_row:
+            await session.commit()
+            return CompleteResponse(
+                completion_id=str(existing_row.completion_id),
+                puzzle_id=puzzle_id,
+                hops=existing_row.hops,
+                time_ms=existing_row.time_ms,
+                completed_at=existing_row.completed_at.isoformat(),
+            )
+
+        new_row = await session.execute(
+            text(
+                """
+                INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms)
+                VALUES (:uid, :pid, :hops, :time_ms)
+                RETURNING completion_id, completed_at
+                """
+            ),
+            {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms},
+        )
+        inserted = new_row.first()
+        await session.commit()
+
+    return CompleteResponse(
+        completion_id=str(inserted.completion_id),
+        puzzle_id=puzzle_id,
+        hops=body.hops,
+        time_ms=body.time_ms,
+        completed_at=inserted.completed_at.isoformat(),
+    )

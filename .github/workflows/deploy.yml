@@ -22,6 +22,7 @@ jobs:
       SERVICE_NAME: connactor-api
       PIPELINE_JOB: connactor-pipeline-full
       COST_REPORT_JOB: connactor-cost-report
+      DAILY_PUZZLE_JOB: connactor-daily-puzzle
     steps:
       - uses: actions/checkout@v4
 
@@ -67,6 +68,13 @@ jobs:
       - name: Roll cost-report job to new image
         run: |
           gcloud run jobs update "$COST_REPORT_JOB" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE_REPO:${{ github.sha }}"
+
+      - name: Roll daily-puzzle job to new image
+        run: |
+          gcloud run jobs update "$DAILY_PUZZLE_JOB" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --image "$IMAGE_REPO:${{ github.sha }}"

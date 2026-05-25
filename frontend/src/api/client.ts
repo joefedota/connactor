@@ -1,5 +1,8 @@
 import type {
   AutocompleteResponse,
+  CompleteRequest,
+  CompleteResponse,
+  DailyResponse,
   GameResponse,
   SolveResponse,
   ValidateResponse,
@@ -72,4 +75,16 @@ export function autocompleteNeighbors(
   const params = new URLSearchParams({ node_id, type, limit: String(limit) });
   if (q.length >= 2) params.set('q', q);
   return request(`/autocomplete/neighbors?${params}`);
+}
+
+export function fetchDaily(): Promise<DailyResponse> {
+  return request('/daily', { credentials: 'include' });
+}
+
+export function submitComplete(body: CompleteRequest): Promise<CompleteResponse> {
+  return request('/complete', {
+    method: 'POST',
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
 }

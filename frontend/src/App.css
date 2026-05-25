@@ -32,6 +32,14 @@
 
 .btn--ghost:hover:not(:disabled) { opacity: 0.8; }
 
+.btn--daily {
+  background: #E4FF3C;
+  color: #333333;
+  border: none;
+}
+
+.btn--daily:hover:not(:disabled) { opacity: 0.88; }
+
 .btn--large {
   padding: 16px 40px;
   font-size: 18px;

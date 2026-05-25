@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" ry="7" fill="#FAF7F2"/>
+  <text
+    x="16"
+    y="24"
+    text-anchor="middle"
+    font-family="'Hanken Grotesk', system-ui, sans-serif"
+    font-weight="800"
+    font-size="23"
+    fill="#333333"
+  >C</text>
+</svg>

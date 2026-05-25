@@ -18,8 +18,23 @@ services:
       - NEO4J_dbms_memory_pagecache_size=2g
     restart: always
 
+  postgres:
+    image: postgres:16
+    container_name: connactor-postgres-dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=connactor
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-connactorpassword}
+      - POSTGRES_DB=connactor
+    restart: always
+
 volumes:
   neo4j_data:
     name: connactor_neo4j_data
   neo4j_logs:
     name: connactor_neo4j_logs
+  postgres_data:
+    name: connactor_postgres_data

@@ -28,7 +28,8 @@ Connactor generates a pair of actors and challenges players to build a chain con
 
 | Screen | Description |
 |--------|-------------|
-| Home | Start game button, How to Play modal |
+| Home | Daily Challenge button, Start Game (random) button, difficulty selector, How to Play modal |
+| Daily | Shows today's puzzle. If already played: result card + share button. If not: loads game board. |
 | Game board | Source/target actors locked at top. Autocomplete search alternates between movie and actor mode by position. Inline error on bad connections. |
 | Results | Player's path vs optimal path(s), hop count, share button, Play Again |
 | How to Play | Modal with Matt Damon → Interstellar → Timothée Chalamet worked example |
@@ -98,11 +99,14 @@ Bipartite graph: actor nodes + movie nodes, edges = actor appeared in movie.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/game` | Live BFS to find a valid random actor pair (2–6 hops) |
+| GET | `/game` | Random actor pair (medium difficulty by default) |
 | POST | `/validate` | Validate full path — called when game ends |
 | POST | `/solve` | All optimal paths — called on give up or game completion |
 | GET | `/autocomplete?q=...&type=actor\|movie` | Unconstrained prefix search |
+| GET | `/autocomplete/neighbors?node_id=...&type=...` | Neighbors of a given node |
 | GET | `/connected?a=...&b=...` | Check whether two nodes share an edge — used for per-step actor validation |
+| GET | `/daily` | Today's daily puzzle + current user's completion status and streak (sets identity cookie) |
+| POST | `/complete` | Record any game completion — daily (pass `puzzle_id`) or random (pass `source_id`, `target_id`, `optimal_hops`) |
 | GET | `/health` | Graph stats |
 
 ---

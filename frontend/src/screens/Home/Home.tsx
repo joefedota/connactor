@@ -50,9 +50,16 @@ const DIFFICULTIES = [
 
 export function Home() {
   const navigate = useNavigate();
-  const { fetchGame, isLoading, endError } = useGameStore();
+  const { fetchGame, prefetchDaily, isLoading, endError } = useGameStore();
   const [showHowTo, setShowHowTo] = useState(false);
   const [difficulty, setDifficulty] = useState<string>('random');
+
+  // Prefetch the daily puzzle in the background so Neon is warm and the
+  // response is cached by the time the user clicks Daily Challenge.
+  useEffect(() => {
+    prefetchDaily();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleStart = async () => {
     await fetchGame(difficulty === 'random' ? undefined : difficulty, { bg: activeDiff.bg, accent: activeDiff.accent, onAccent: activeDiff.onAccent, text: activeDiff.text });
@@ -106,7 +113,14 @@ export function Home() {
           onClick={handleStart}
           disabled={isLoading}
         >
-          {isLoading ? 'Loading Game…' : 'Start Game'}
+          {isLoading ? 'Loading Game…' : 'New Game'}
+        </button>
+
+        <button
+          className="btn btn--daily btn--large"
+          onClick={() => navigate('/daily')}
+        >
+          Daily Challenge
         </button>
 
         <button
