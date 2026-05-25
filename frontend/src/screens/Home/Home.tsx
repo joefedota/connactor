@@ -44,21 +44,21 @@ export function Home() {
               className="btn btn--primary btn--large"
               onClick={() => setView('difficulty')}
             >
-              New Game
+              New game
             </button>
 
             <button
               className="btn btn--ghost"
               onClick={() => setShowHowTo(true)}
             >
-              How to Play
+              How to play
             </button>
 
             <button
               className="home__daily-link"
               onClick={() => navigate('/daily')}
             >
-              ← Daily Challenge
+              ← Daily challenge
             </button>
           </>
         ) : (

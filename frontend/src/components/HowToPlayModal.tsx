@@ -5,7 +5,7 @@ export function HowToPlayModal({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal__close" onClick={onClose}>×</button>
-        <h2 className="modal__title">How to Play</h2>
+        <h2 className="modal__title">How to play</h2>
         <p className="modal__text">
           Connect two actors through shared movies in as few steps as possible.
         </p>
@@ -30,7 +30,7 @@ export function HowToPlayModal({ onClose }: { onClose: () => void }) {
         <ul className="modal__rules">
           <li>Search for an actor or movie at each step</li>
           <li>Tap an actor to peek at their photo</li>
-          <li>Tap <strong>Give Up</strong> to see the optimal solution</li>
+          <li>Tap <strong>Give up</strong> to see the best answer</li>
           <li>Try to match or beat the best number of actors</li>
         </ul>
       </div>

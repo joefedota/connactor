@@ -109,7 +109,7 @@ export function GameBoard() {
             ?
           </button>
           <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>
-            Give Up
+            Give up
           </button>
         </div>
       </header>

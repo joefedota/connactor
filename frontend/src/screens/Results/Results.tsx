@@ -185,7 +185,7 @@ export function Results() {
         {game.isDailyChallenge ? (
           <>
             <button className="btn btn--primary" onClick={handleGoHome}>
-              Back to Home
+              Back to home
             </button>
             <button className="btn btn--ghost" onClick={handleShare}>
               Share
@@ -194,7 +194,7 @@ export function Results() {
         ) : (
           <>
             <button className="btn btn--primary" onClick={handlePlayAgain}>
-              Play Again
+              Play again
             </button>
             <button className="btn btn--ghost" onClick={handleShare}>
               Share

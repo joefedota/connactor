@@ -26,6 +26,8 @@ For every GitHub issue you implement:
 
 4. **Never commit directly to `main`.**
 
+5. **Before pushing follow-up commits to an existing branch**, run `gh pr view <number> --json state,mergedAt` to confirm the PR is still open. If it has been merged, create a new branch off `main` and open a new PR instead.
+
 ## Branch naming
 `feature/issue-{number}-{kebab-case-description}`
 
@@ -46,6 +48,11 @@ https://github.com/joefedota/connactor
 
 ## Project board
 https://github.com/joefedota/connactor/projects
+
+## Product copy rules
+
+- **Never use the word "optimal"** in any user-facing text (UI labels, copy, tooltips, messages). Use **"best answer"** instead.
+- **Sentence case everywhere** — all button labels, headings, tooltips, error messages, and any other user-facing text use sentence case. e.g. "New game" not "New Game", "How to play" not "How to Play", "Give up" not "Give Up".
 
 ## Code style rules
 
