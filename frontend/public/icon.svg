@@ -4,8 +4,8 @@
     x="16"
     y="24"
     text-anchor="middle"
-    font-family="Arial Black, Arial, Helvetica, sans-serif"
-    font-weight="900"
+    font-family="'Hanken Grotesk', system-ui, sans-serif"
+    font-weight="800"
     font-size="23"
     fill="#333333"
   >C</text>
