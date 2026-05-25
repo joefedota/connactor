@@ -29,10 +29,10 @@ sys.path.insert(0, str(_SCRIPTS_DIR))
 sys.path.insert(0, str(_SCRIPTS_DIR.parent))
 
 import utils.gcs as gcs
+from ingest.build_candidate_list import run as build_candidates
 from ingest.crawl_credits import run as crawl_credits
 from ingest.crawl_movie_details import run as crawl_movie_details
 from ingest.crawl_persons import run as crawl_persons
-from ingest.download_movie_ids import run as download_ids
 from ingest.load_neo4j import run as load_neo4j
 
 logger = logging.getLogger(__name__)
@@ -91,9 +91,10 @@ def main() -> None:
     logger.info("=== Connactor pipeline (mode=%s) ===", args.mode)
 
     if not args.skip_download:
-        # force=True so threshold changes / freshly-added TMDB titles pick up on
-        # every run. Download is cheap (one ~60 MB gz file) — no reason to cache.
-        _step("Download movie IDs", lambda: download_ids(force=True))
+        # Discover-based candidate list (#91): vote_count >= 100, year-sharded.
+        # Cheap (~1-2 min) so we always run fresh — picks up new movies that
+        # crossed the vote_count threshold since the last run.
+        _step("Build candidate list (TMDb /discover)", build_candidates)
 
     if args.mode == "dev":
         _step(

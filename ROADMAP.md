@@ -62,6 +62,7 @@
 - [x] Store `genre_ids` on Movie nodes via pipeline crawl
 - [ ] Re-run pipeline to populate `genre_ids` on existing nodes
 - [x] Use vote_count (not popularity) as the ingest-time movie filter (#65)
+- [x] Pivot ingest from TMDB daily export to /discover/movie API (#91)
 - [ ] Marvel kill switch (#52)
 
 ## Phase 5 — Franchise Blocklist (v1.5)
