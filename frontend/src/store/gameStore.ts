@@ -205,6 +205,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           status: 'won',
           isOptimal: resp.is_optimal ?? false,
           allPaths: solveResp.paths,
+          completionTimeMs: timeMs,
         },
       });
       get().submitCompletion(playerHops, timeMs, solveResp.hop_count);
@@ -277,6 +278,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           status: 'won',
           isOptimal: validateResp.valid ? (validateResp.is_optimal ?? false) : false,
           allPaths: solveResp.paths,
+          completionTimeMs: timeMs,
         },
       });
       get().submitCompletion(playerHops, timeMs, solveResp.hop_count);

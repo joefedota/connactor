@@ -25,6 +25,7 @@ export interface GameState {
   puzzleId?: string;         // set for daily games; used when submitting completion
   optimalHops?: number;      // known for daily games from GET /daily
   startedAt?: number;        // Date.now() when game started; used to compute time_ms
+  completionTimeMs?: number; // elapsed ms at win; set when status transitions to 'won'
 }
 
 export interface ValidateResponse {

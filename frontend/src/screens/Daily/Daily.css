@@ -90,24 +90,34 @@
   margin-bottom: 0.75rem;
 }
 
-.daily__result {
+.daily__stats {
   display: flex;
-  align-items: baseline;
   justify-content: center;
-  gap: 0.4rem;
-  margin-bottom: 0.25rem;
+  gap: 2rem;
+  margin-bottom: 0.5rem;
 }
 
-.daily__result-num {
-  font-size: 2.5rem;
+.daily__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.daily__stat-num {
+  font-size: 2rem;
   font-weight: 700;
   color: #222;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.daily__result-label {
-  font-size: 1rem;
-  color: #555;
+.daily__stat-label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
 .daily__optimal-badge {

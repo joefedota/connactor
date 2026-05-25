@@ -48,6 +48,15 @@
   font-size: 15px;
 }
 
+.results__time {
+  font-size: 22px;
+  font-weight: 700;
+  color: #333333;
+  letter-spacing: -0.5px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
 .results__optimal-callout {
   display: flex;
   align-items: center;
