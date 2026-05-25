@@ -363,7 +363,7 @@ async def post_hint(request: Request, body: HintRequest):
                   OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
                 WITH nodes(p)[1] AS m
                 WHERE toString(m.movie_id) NOT IN $excluded
-                WITH DISTINCT m ORDER BY m.popularity DESC
+                WITH DISTINCT m ORDER BY m.vote_count DESC
                 RETURN {type: 'movie', id: toString(m.movie_id), label: m.title,
                         year: toString(m.year), image_path: m.poster_path} AS hint
                 LIMIT 1
