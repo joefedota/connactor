@@ -101,10 +101,10 @@ export function GameBoard() {
             </span>
           )}
         </div>
-        {game.startedAt && (
-          <span className="game-board__timer">{formatTime(elapsed)}</span>
-        )}
-        <div className="game-board__header-actions">
+        <span className="game-board__timer">
+          {game.status === 'playing' && game.startedAt ? formatTime(elapsed) : ''}
+        </span>
+        <div className="game-board__header-actions" style={{ justifySelf: 'end' }}>
           <button className="game-board__help-btn" onClick={() => setShowHowTo(true)} aria-label="How to play">
             ?
           </button>
