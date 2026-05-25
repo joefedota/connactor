@@ -25,6 +25,7 @@ interface GameStore {
   submitCompletion: (hops: number, timeMs?: number, optimalHops?: number) => Promise<void>;
   addNode: (node: NodeInfo) => Promise<boolean>;
   removeLastFromPath: () => void;
+  flipActors: () => void;
   submit: () => Promise<boolean>;
   giveUp: () => Promise<void>;
   resetGame: () => void;
@@ -219,6 +220,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (game.currentPath.length <= 1) return;
     set({
       game: { ...game, currentPath: game.currentPath.slice(0, -1) },
+      endError: null,
+      stepError: null,
+    });
+  },
+
+  flipActors: () => {
+    const { game } = get();
+    if (!game || game.status !== 'playing') return;
+    if (game.currentPath.length > 1) return; // can't flip once moves have been made
+    set({
+      game: {
+        ...game,
+        source: game.target,
+        target: game.source,
+        currentPath: [game.target],
+      },
       endError: null,
       stepError: null,
     });

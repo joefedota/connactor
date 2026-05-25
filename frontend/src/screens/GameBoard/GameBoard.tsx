@@ -9,7 +9,7 @@ import './GameBoard.css';
 
 export function GameBoard() {
   const navigate = useNavigate();
-  const { game, isLoading, addNode, removeLastFromPath, giveUp, endError, stepError } =
+  const { game, isLoading, addNode, removeLastFromPath, flipActors, giveUp, endError, stepError } =
     useGameStore();
 
   useEffect(() => {
@@ -91,7 +91,13 @@ export function GameBoard() {
           <div className="game-board__actor-label">Start</div>
           <NodeChip node={source} />
         </div>
-        <div className="game-board__actor-divider">→</div>
+        <div className="game-board__actor-divider">
+          {currentPath.length === 1 ? (
+            <button className="game-board__flip-btn" onClick={flipActors} title="Flip actors">⇄</button>
+          ) : (
+            <span>→</span>
+          )}
+        </div>
         <div className="game-board__actor-card">
           <div className="game-board__actor-label">Reach</div>
           <div

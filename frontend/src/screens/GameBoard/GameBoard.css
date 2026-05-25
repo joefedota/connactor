@@ -76,6 +76,31 @@
   color: #bbbbbb;
   font-size: 28px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-board__flip-btn {
+  background: none;
+  border: 1.5px solid #cccccc;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  color: #888888;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, color 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+
+.game-board__flip-btn:hover {
+  border-color: #333333;
+  color: #333333;
 }
 
 .game-board__photo-tip {
