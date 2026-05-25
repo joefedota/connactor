@@ -154,7 +154,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--date",
         default=None,
-        help="Target date YYYY-MM-DD (default: tomorrow UTC)",
+        help="Target date YYYY-MM-DD (default: today UTC)",
     )
     parser.add_argument(
         "--force",
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     target = (
         datetime.date.fromisoformat(args.date)
         if args.date
-        else datetime.date.today() + datetime.timedelta(days=1)
+        else datetime.date.today()
     )
 
     asyncio.run(main(target, force=args.force))
