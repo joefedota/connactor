@@ -17,9 +17,9 @@
 }
 
 .game-board__timer {
-  font-size: 13px;
-  font-weight: 500;
-  color: #aaaaaa;
+  font-size: 14px;
+  font-weight: 600;
+  color: #888888;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
@@ -199,6 +199,12 @@
   padding: 0 20px;
   font-size: 16px;
   color: #888888;
+}
+
+.game-board__give-up {
+  display: flex;
+  justify-content: center;
+  padding: 24px 20px 8px;
 }
 
 /* Difficulty Badges */
