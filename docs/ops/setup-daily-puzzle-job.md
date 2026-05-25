@@ -86,8 +86,10 @@ Regenerate today's puzzle (replaces the existing one):
 ```bash
 gcloud run jobs execute connactor-daily-puzzle \
   --project connactor-497019 --region us-central1 \
-  --args "pipeline/generate_daily_puzzle.py,--date,2026-05-24,--force" --async
+  --args="pipeline/generate_daily_puzzle.py,--date,2026-05-25,--force" --wait
 ```
+
+See [`replace-daily-puzzle.md`](./replace-daily-puzzle.md) for the full runbook including verification steps.
 
 Or use the local wrapper script against prod Postgres + local Neo4j:
 ```bash
