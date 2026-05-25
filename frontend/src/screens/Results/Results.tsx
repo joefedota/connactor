@@ -52,6 +52,11 @@ export function Results() {
     navigate('/game');
   };
 
+  const handleGoHome = () => {
+    resetGame();
+    navigate('/');
+  };
+
   const handleShare = async () => {
     let text: string;
     if (game.isDailyChallenge) {
@@ -150,12 +155,25 @@ export function Results() {
       )}
 
       <div className="results__actions">
-        <button className="btn btn--primary" onClick={handlePlayAgain}>
-          Play Again
-        </button>
-        <button className="btn btn--ghost" onClick={handleShare}>
-          Share
-        </button>
+        {game.isDailyChallenge ? (
+          <>
+            <button className="btn btn--primary" onClick={handleGoHome}>
+              Back to Home
+            </button>
+            <button className="btn btn--ghost" onClick={handleShare}>
+              Share
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="btn btn--primary" onClick={handlePlayAgain}>
+              Play Again
+            </button>
+            <button className="btn btn--ghost" onClick={handleShare}>
+              Share
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
