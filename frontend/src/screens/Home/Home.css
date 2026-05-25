@@ -4,8 +4,26 @@
   justify-content: center;
   min-height: 100dvh;
   padding: 24px;
-  background: var(--color-bg, #1400FF);
-  transition: background 0.4s ease;
+  background: #FAF7F2;
+  --color-accent: #E4FF3C;
+  --color-on-accent: #333333;
+}
+
+.home__daily-link {
+  background: none;
+  border: none;
+  color: #aaaaaa;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-top: -8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.home__daily-link:hover {
+  color: #666666;
 }
 
 .home__content {
@@ -170,89 +188,73 @@
   color: #333333;
 }
 
-/* Difficulty Selector Styling */
-.difficulty-container {
-  width: 100%;
-  margin: 10px 0;
+/* Difficulty picker view */
+.home__back {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #888888;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: -4px;
+}
+
+.home__back:hover { color: #333333; }
+
+.home__picker-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #333333;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.home__difficulty-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  align-items: center;
-}
-
-.difficulty-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #888888;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.difficulty-tabs {
-  display: flex;
+  gap: 10px;
   width: 100%;
-  gap: 8px;
 }
 
-.difficulty-tab {
-  flex: 1;
+.home__diff-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   background: transparent;
-  border: 1.5px solid #cccccc;
-  padding: 10px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #444444;
+  border: 1.5px solid #dddddd;
+  border-radius: 14px;
+  padding: 16px 20px;
   cursor: pointer;
-  border-radius: 16px;
-  transition: all 0.2s ease;
   font-family: inherit;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.difficulty-tab:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
-
-.difficulty-tab.is-active {
-  background: transparent;
+.home__diff-btn:hover:not(:disabled) {
   border-color: #333333;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.home__diff-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.home__diff-btn.is-loading {
+  border-color: #333333;
+  opacity: 1;
+}
+
+.home__diff-label {
+  font-size: 16px;
+  font-weight: 600;
   color: #333333;
 }
 
-.difficulty-info-card {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.01);
-  border: 1.5px solid rgba(255, 255, 255, 0.03);
-  border-radius: 14px;
-  padding: 16px;
-  min-height: 84px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-
-.difficulty-info-card-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.difficulty-badge {
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 6px;
-  border: 1.5px solid;
-  letter-spacing: 0.1em;
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.difficulty-info-desc {
-  margin: 0;
+.home__diff-desc {
   font-size: 13px;
-  color: #999;
-  line-height: 1.5;
-  text-align: center;
+  color: #999999;
 }

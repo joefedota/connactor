@@ -21,8 +21,13 @@ function buildShareText(date: string, hops: number, optimalHops: number): string
 
 export function Daily() {
   const navigate = useNavigate();
-  const { fetchDailyGame, isLoading, endError, dailyData } = useGameStore();
+  const { fetchDailyGame, dismissDaily, isLoading, endError, dailyData } = useGameStore();
   const started = useRef(false);
+
+  const handleSkip = () => {
+    dismissDaily();
+    navigate('/', { replace: true });
+  };
 
   useEffect(() => {
     document.body.style.background = '#FAF7F2';
@@ -106,6 +111,9 @@ export function Daily() {
   return (
     <div className="daily">
       <div className="daily__loading">Setting up today's puzzle…</div>
+      <button className="daily__skip" onClick={handleSkip}>
+        Skip today
+      </button>
     </div>
   );
 }

@@ -122,7 +122,7 @@ async def _log_request_timing(request: Request, call_next):
 app.add_middleware(UserIdentityMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://connactor.com", "https://www.connactor.com"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "https://connactor.com", "https://www.connactor.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

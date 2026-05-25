@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../../store/gameStore';
 import './Home.css';
@@ -33,7 +33,7 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
         <ul className="modal__rules">
           <li>Search for an actor or movie at each step</li>
           <li>Hover an actor (or tap, on mobile) to peek at their photo</li>
-          <li>Tap <strong>Give Up</strong> to see the best answer</li>
+          <li>Tap <strong>Give Up</strong> to see the optimal solution</li>
           <li>Try to match or beat the best number of actors</li>
         </ul>
       </div>
@@ -42,93 +42,86 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 }
 
 const DIFFICULTIES = [
-  { id: 'random', label: 'Random', desc: 'Fully random path length and actor pool.',            bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
-  { id: 'easy',   label: 'Easy',   desc: 'Connect two Super Famous stars in exactly 2 hops.',   bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
-  { id: 'medium', label: 'Medium', desc: 'Connect famous actors in 4 hops or fewer.',            bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
-  { id: 'hard',   label: 'Hard',   desc: 'Connect moderately known actors in 6 hops or fewer.',  bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' },
+  { id: 'easy',   label: 'Easy',   desc: 'Hollywood A-listers' },
+  { id: 'medium', label: 'Medium', desc: 'Well-known actors' },
+  { id: 'hard',   label: 'Hard',   desc: 'Lesser-known names' },
 ];
+
+const THEME = { bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' };
 
 export function Home() {
   const navigate = useNavigate();
-  const { fetchGame, prefetchDaily, isLoading, endError } = useGameStore();
+  const { fetchGame, endError } = useGameStore();
   const [showHowTo, setShowHowTo] = useState(false);
-  const [difficulty, setDifficulty] = useState<string>('random');
+  const [view, setView] = useState<'menu' | 'difficulty'>('menu');
+  const [loadingDiff, setLoadingDiff] = useState<string | null>(null);
 
-  // Prefetch the daily puzzle in the background so Neon is warm and the
-  // response is cached by the time the user clicks Daily Challenge.
-  useEffect(() => {
-    prefetchDaily();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleStart = async () => {
-    await fetchGame(difficulty === 'random' ? undefined : difficulty, { bg: activeDiff.bg, accent: activeDiff.accent, onAccent: activeDiff.onAccent, text: activeDiff.text });
+  const handleStart = async (diffId: string) => {
+    setLoadingDiff(diffId);
+    await fetchGame(diffId, THEME);
     document.body.style.transition = 'none';
     document.body.style.background = '#FAF7F2';
     navigate('/game');
   };
 
-  const activeDiff = DIFFICULTIES.find((d) => d.id === difficulty) || DIFFICULTIES[0];
-
-  useEffect(() => {
-    document.body.style.background = activeDiff.bg;
-    document.body.style.transition = 'background 0.4s ease';
-  }, [activeDiff.bg]);
-
-  const theme = {
-    '--color-bg': activeDiff.bg,
-    '--color-accent': activeDiff.accent,
-    '--color-on-accent': activeDiff.onAccent,
-    '--color-text': activeDiff.text,
-  } as React.CSSProperties;
-
   return (
-    <div className="home" style={theme}>
+    <div className="home">
       <div className="home__content">
-        <h1 className="home__title">Connactor</h1>
-        <p className="home__subtitle">
-          Connect two actors through shared movies in as few steps as possible.
-        </p>
 
-        {endError && <div className="home__error">{endError}</div>}
+        {view === 'menu' ? (
+          <>
+            <h1 className="home__title">Connactor</h1>
+            <p className="home__subtitle">
+              Connect two actors through shared movies in as few steps as possible.
+            </p>
 
-        <div className="difficulty-container">
-          <div className="difficulty-label">Select Difficulty</div>
-          <div className="difficulty-tabs">
-            {DIFFICULTIES.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                className={`difficulty-tab ${difficulty === d.id ? 'is-active' : ''}`}
-                onClick={() => setDifficulty(d.id)}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
+            {endError && <div className="home__error">{endError}</div>}
 
-        <button
-          className="btn btn--primary btn--large"
-          onClick={handleStart}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Loading Game…' : 'New Game'}
-        </button>
+            <button
+              className="btn btn--primary btn--large"
+              onClick={() => setView('difficulty')}
+            >
+              New Game
+            </button>
 
-        <button
-          className="btn btn--daily btn--large"
-          onClick={() => navigate('/daily')}
-        >
-          Daily Challenge
-        </button>
+            <button
+              className="btn btn--ghost"
+              onClick={() => setShowHowTo(true)}
+            >
+              How to Play
+            </button>
 
-        <button
-          className="btn btn--ghost"
-          onClick={() => setShowHowTo(true)}
-        >
-          How to Play
-        </button>
+            <button
+              className="home__daily-link"
+              onClick={() => navigate('/daily')}
+            >
+              ↩ Daily Challenge
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="home__back" onClick={() => setView('menu')}>
+              ← Back
+            </button>
+
+            <h2 className="home__picker-title">Choose difficulty</h2>
+
+            <div className="home__difficulty-list">
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.id}
+                  className={`home__diff-btn ${loadingDiff === d.id ? 'is-loading' : ''}`}
+                  disabled={loadingDiff !== null}
+                  onClick={() => handleStart(d.id)}
+                >
+                  <span className="home__diff-label">{loadingDiff === d.id ? 'Loading…' : d.label}</span>
+                  <span className="home__diff-desc">{d.desc}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
       </div>
 
       {showHowTo && <HowToPlayModal onClose={() => setShowHowTo(false)} />}
