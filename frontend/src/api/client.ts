@@ -4,6 +4,7 @@ import type {
   CompleteResponse,
   DailyResponse,
   GameResponse,
+  HintResponse,
   SolveResponse,
   ValidateResponse,
 } from '../types';
@@ -85,6 +86,18 @@ export function submitComplete(body: CompleteRequest): Promise<CompleteResponse>
   return request('/complete', {
     method: 'POST',
     credentials: 'include',
+    body: JSON.stringify(body),
+  });
+}
+
+export function requestHint(body: {
+  target_id: string;
+  last_node_id: string;
+  last_node_type: string;
+  excluded_ids: string[];
+}): Promise<HintResponse> {
+  return request('/hint', {
+    method: 'POST',
     body: JSON.stringify(body),
   });
 }

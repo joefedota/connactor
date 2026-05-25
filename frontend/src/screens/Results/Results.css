@@ -57,6 +57,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.results__hints-used {
+  font-size: 13px;
+  color: #999999;
+  margin-top: 4px;
+}
+
 .results__optimal-callout {
   display: flex;
   align-items: center;
