@@ -58,14 +58,14 @@ PROJECT_NUMBER=$(gcloud projects describe connactor-497019 --format='value(proje
 gcloud scheduler jobs create http connactor-daily-puzzle-schedule \
   --project connactor-497019 \
   --location us-central1 \
-  --schedule "0 6 * * *" \
+  --schedule "1 0 * * *" \
   --time-zone "UTC" \
   --http-method POST \
   --uri "https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_NUMBER}/jobs/connactor-daily-puzzle:run" \
   --oauth-service-account-email connactor-scheduler@connactor-497019.iam.gserviceaccount.com
 ```
 
-The pipeline job (`connactor-pipeline-full`) runs at 09:00 UTC and recomputes `fame_rank`. Scheduling the puzzle generator at 06:00 UTC means it uses yesterday's `fame_rank` values — this is fine since fame ranks change slowly (daily crawl data).
+The job runs at 00:01 UTC — one minute into the new day — and generates today's puzzle (default: `--date tomorrow` resolves to the current UTC date from the job's perspective). This ensures there is no window during the day when `/daily` returns 404. The pipeline job (`connactor-pipeline-full`) runs at 09:00 UTC and recomputes `fame_rank`; the puzzle generator runs before it and uses the previous day's ranks, which is fine since fame ranks change slowly.
 
 ## Manual operations
 
@@ -80,6 +80,13 @@ Generate a specific date's puzzle (override args):
 gcloud run jobs execute connactor-daily-puzzle \
   --project connactor-497019 --region us-central1 \
   --args "pipeline/generate_daily_puzzle.py,--date,2026-05-26" --async
+```
+
+Regenerate today's puzzle (replaces the existing one):
+```bash
+gcloud run jobs execute connactor-daily-puzzle \
+  --project connactor-497019 --region us-central1 \
+  --args "pipeline/generate_daily_puzzle.py,--date,2026-05-24,--force" --async
 ```
 
 Or use the local wrapper script against prod Postgres + local Neo4j:

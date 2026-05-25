@@ -19,6 +19,7 @@ interface GameStore {
 
   fetchGame: (difficulty?: string, theme?: Theme) => Promise<void>;
   fetchDailyGame: () => Promise<DailyResponse | null>;
+  prefetchDaily: () => void;
   submitCompletion: (hops: number, timeMs?: number, optimalHops?: number) => Promise<void>;
   addNode: (node: NodeInfo) => Promise<boolean>;
   removeLastFromPath: () => void;
@@ -35,7 +36,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
   stepError: null,
   dailyData: null,
 
+  prefetchDaily: () => {
+    // Fire-and-forget: warms the Neon connection and caches dailyData so that
+    // navigating to /daily feels instant. Never touches isLoading.
+    api.fetchDaily().then((daily) => set({ dailyData: daily })).catch(() => null);
+  },
+
   fetchDailyGame: async () => {
+    const cached = get().dailyData;
+    if (cached) {
+      if (!cached.already_completed) {
+        set({
+          game: {
+            gameId: cached.puzzle_id,
+            source: cached.source,
+            target: cached.target,
+            currentPath: [cached.source],
+            status: 'playing',
+            isOptimal: null,
+            allPaths: null,
+            difficulty: 'medium',
+            isDailyChallenge: true,
+            puzzleId: cached.puzzle_id,
+            optimalHops: cached.optimal_hops,
+            startedAt: Date.now(),
+          },
+        });
+      }
+      return cached;
+    }
     set({ isLoading: true, endError: null, stepError: null });
     try {
       const daily = await api.fetchDaily();
