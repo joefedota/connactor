@@ -5,9 +5,9 @@ import { useGameStore } from '../../store/gameStore';
 import './Home.css';
 
 const DIFFICULTIES = [
-  { id: 'easy',   label: 'Easy',   desc: 'Hollywood A-listers' },
-  { id: 'medium', label: 'Medium', desc: 'Well-known actors' },
-  { id: 'hard',   label: 'Hard',   desc: 'Lesser-known names' },
+  { id: 'easy',   label: 'Easy' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'hard',   label: 'Hard' },
 ];
 
 const THEME = { bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' };
@@ -78,7 +78,6 @@ export function Home() {
                   onClick={() => handleStart(d.id)}
                 >
                   <span className="home__diff-label">{loadingDiff === d.id ? 'Loading…' : d.label}</span>
-                  <span className="home__diff-desc">{d.desc}</span>
                 </button>
               ))}
             </div>
