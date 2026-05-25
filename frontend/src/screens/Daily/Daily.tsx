@@ -95,7 +95,7 @@ export function Daily() {
       <div className="daily">
         <button className="daily__back btn btn--ghost" onClick={() => navigate('/')}>← Home</button>
         <div className="daily__content">
-          <div className="daily__label">Daily Challenge</div>
+          <div className="daily__label">Daily challenge</div>
           <h1 className="daily__date">{formatDate(puzzle_date)}</h1>
           <div className="daily__pair">
             <span className="daily__actor">{source.label}</span>
@@ -122,10 +122,10 @@ export function Daily() {
           </div>
 
           <button className="btn btn--daily btn--large" onClick={handleShare}>
-            Share Result
+            Share result
           </button>
           <button className="btn btn--ghost btn--large" onClick={() => navigate('/')}>
-            Play a Random Game
+            Play a random game
           </button>
         </div>
       </div>
