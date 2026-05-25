@@ -75,7 +75,7 @@
 **Goal:** Real-time multiplayer rooms.
 
 - [ ] JWT auth (email or Google SSO)
-- [ ] Postgres for user accounts and leaderboards
+- [x] Postgres for user state — Neon (free tier), schema covers users + puzzles + completions — issue #44
 - [ ] WebSocket room system (Redis pub/sub)
 - [ ] Leaderboard ranked by hops + time
 - [ ] Bonus star for optimal path
@@ -83,10 +83,17 @@
 ## Phase 7 — Daily Challenge (v3)
 **Goal:** Wordle-style shared daily puzzle.
 
-- [ ] Pre-generate curated daily pair (scheduled job)
-- [ ] `/daily` endpoint returning today's pair
-- [ ] Share result with date stamp
+- [x] Generalized puzzle persistence — every played pair becomes a persisted puzzle with UUID — issue #44
+- [x] Anonymous user identity — itsdangerous-signed HTTPOnly cookie — issue #44
+- [x] Game completion tracking — all game completions recorded against puzzle + user — issue #44
+- [x] Pre-generate curated daily pair — `bin/generate_daily_puzzle.py` Cloud Run Job — issue #44
+- [x] `GET /daily` endpoint returning today's pair + user completion status + streak — issue #44
+- [x] `POST /complete` unified completion endpoint (daily + random) — issue #44
+- [x] Share result with date stamp — issue #44
+- [x] Daily Challenge button on home screen + `/daily` route — issue #44
 - [ ] Historical results page
+- [ ] Streak display in UI (streak computed server-side, display deferred)
+- [ ] Emoji grid share format (v1.5)
 
 ## Phase 8 — Ops & Observability
 **Goal:** Don't get surprised by spend or by traffic going to zero.

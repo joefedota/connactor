@@ -20,8 +20,9 @@ IMDB does not offer a free API for full cast data. Their full credits are availa
 TMDB API
   └─► ingest service (async crawler)
         └─► Neo4j (persistent graph DB, GCP VM)
-              └─► FastAPI backend (stateless)
-                    └─► Redis (pair pool + solve cache)
+              └─► FastAPI backend
+                    ├─► Postgres/Neon (user identity + puzzle + completion state)
+                    └─► Redis (pair pool + solve cache, deferred)
                           └─► React frontend (Cloudflare Pages)
 ```
 
@@ -46,6 +47,46 @@ TMDB API
 ### Hourly Pair Pool Refresh (cron)
 
 Pre-generate 100 valid actor pairs per difficulty tier and store in Redis. Eliminates the 50-retry BFS loop from v1.
+
+---
+
+## Postgres Data Model (User State)
+
+Hosted on **Neon** (serverless Postgres, free tier). Accessed via SQLAlchemy async + asyncpg.
+
+```sql
+users(
+  user_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+
+-- Every unique actor pair played becomes a puzzle row.
+-- Daily puzzles are stamped with is_daily=TRUE and scheduled_date.
+-- If a randomly-played pair is later chosen as the daily, the same row is reused (UPSERT).
+puzzles(
+  puzzle_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id      INT  NOT NULL,
+  target_id      INT  NOT NULL,
+  optimal_hops   INT  NOT NULL,
+  is_daily       BOOL NOT NULL DEFAULT FALSE,
+  scheduled_date DATE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source_id, target_id)
+)
+
+-- Every completed game, daily or random, is recorded here.
+game_completions(
+  completion_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(user_id),
+  puzzle_id     UUID NOT NULL REFERENCES puzzles(puzzle_id),
+  hops          INT  NOT NULL,
+  time_ms       INT,
+  completed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, puzzle_id)
+)
+```
+
+**Anonymous identity**: HTTPOnly cookie signed with `itsdangerous.URLSafeSerializer`. Created on first request, persists 2 years. No login required.
 
 ---
 
@@ -223,7 +264,7 @@ GCP Persistent Disk is a separate resource from the VM — it survives VM deleti
 Two GitHub Actions workflows:
 
 - **`.github/workflows/ci.yml`** — runs on every PR. `backend-test` spins up `neo4j:5-community` as a service container and runs the pytest suite against it. `frontend-build` runs `npm run build` (TypeScript + Vite) to catch type errors. Also exposed as a reusable workflow.
-- **`.github/workflows/deploy.yml`** — runs on push to `main`. Re-runs CI, then `gcloud builds submit` produces an image tagged with both `:${commit-sha}` and `:latest`, then `gcloud run services update` rolls the Cloud Run service and `gcloud run jobs update` rolls the `connactor-pipeline-full` job to the same SHA-pinned digest. SHA tags enable trivial rollback.
+- **`.github/workflows/deploy.yml`** — runs on push to `main`. Re-runs CI, then `gcloud builds submit` produces an image tagged with both `:${commit-sha}` and `:latest`, then `gcloud run services update` rolls the Cloud Run service and `gcloud run jobs update` rolls the `connactor-pipeline-full`, `connactor-cost-report`, and `connactor-daily-puzzle` jobs to the same SHA-pinned digest. SHA tags enable trivial rollback.
 
 Authentication uses Workload Identity Federation (no static JSON keys in GitHub secrets). GitHub's OIDC token is exchanged for a short-lived GCP token that impersonates the existing `connactor-api` service account. One-time setup is in [`docs/ops/setup-wif.md`](./ops/setup-wif.md).
 
@@ -237,6 +278,8 @@ Frontend deploys via Cloudflare Pages on push to `main` (separate from the GitHu
 Setup is captured in [`docs/ops/setup-cloudflare.md`](./ops/setup-cloudflare.md). The frontend bakes `VITE_API_URL=https://api.connactor.com` into the bundle at build time via Cloudflare Pages environment variables.
 
 ### Cost + usage monitoring
+
+A separate Cloud Run Job (`connactor-daily-puzzle`, triggered every day at 06:00 UTC) runs `pipeline/generate_daily_puzzle.py`. It picks two random actors from the medium fame tier (`fame_rank` 50–200), verifies a path exists between them, and upserts the pair into the `puzzles` table with `is_daily=TRUE` and `scheduled_date = tomorrow (UTC)`. The job is idempotent — if tomorrow's puzzle already exists it skips silently. Setup runbook: [`docs/ops/setup-daily-puzzle-job.md`](./ops/setup-daily-puzzle-job.md).
 
 A daily Cloud Run Job (`connactor-cost-report`, triggered every day at 14:00 UTC by Cloud Scheduler) builds a single HTML email summarising the rolling 7-day window vs the week before. Three data sources, one Resend POST:
 

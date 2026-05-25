@@ -106,7 +106,14 @@ export function Home() {
           onClick={handleStart}
           disabled={isLoading}
         >
-          {isLoading ? 'Loading Game…' : 'Start Game'}
+          {isLoading ? 'Loading Game…' : 'New Game'}
+        </button>
+
+        <button
+          className="btn btn--daily btn--large"
+          onClick={() => navigate('/daily')}
+        >
+          Daily Challenge
         </button>
 
         <button
