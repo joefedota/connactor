@@ -263,7 +263,8 @@ async def _fetch_app_metrics_async(
 ) -> AppWeeklySummary:
     dsn = db_url.replace("postgresql+asyncpg://", "postgresql://")
     start_dt = datetime.combine(start, datetime.min.time(), timezone.utc)
-    end_dt = datetime.combine(end, datetime.min.time(), timezone.utc)
+    # Use end of today (tomorrow midnight) so data from the current day is included.
+    end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), timezone.utc)
     prior_start_dt = datetime.combine(prior_start, datetime.min.time(), timezone.utc)
 
     conn = await asyncpg.connect(dsn)
@@ -333,7 +334,7 @@ async def _fetch_app_metrics_async(
             dau=dau_by_day.get(start + timedelta(days=i), 0),
             new_users=new_by_day.get(start + timedelta(days=i), 0),
         )
-        for i in range(7)
+        for i in range(8)  # start through today (end) inclusive
     ]
 
     return AppWeeklySummary(
