@@ -16,10 +16,12 @@ interface GameStore {
   endError: string | null;
   stepError: string | null;  // shown when actor isn't in the last movie
   dailyData: DailyResponse | null; // cached GET /daily response
+  dailyDismissed: boolean; // user skipped daily this session
 
   fetchGame: (difficulty?: string, theme?: Theme) => Promise<void>;
   fetchDailyGame: () => Promise<DailyResponse | null>;
   prefetchDaily: () => void;
+  dismissDaily: () => void;
   submitCompletion: (hops: number, timeMs?: number, optimalHops?: number) => Promise<void>;
   addNode: (node: NodeInfo) => Promise<boolean>;
   removeLastFromPath: () => void;
@@ -35,6 +37,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   endError: null,
   stepError: null,
   dailyData: null,
+  dailyDismissed: false,
+
+  dismissDaily: () => set({ dailyDismissed: true }),
 
   prefetchDaily: () => {
     // Fire-and-forget: warms the Neon connection and caches dailyData so that
@@ -103,6 +108,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       if (game.isDailyChallenge && game.puzzleId) {
         await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs });
+        const d = get().dailyData;
+        if (d) set({ dailyData: { ...d, already_completed: true } });
       } else {
         // optimalHops is passed from the solve response at call sites; game.optimalHops
         // is only set for daily games, so we must use the passed-in value for random games.

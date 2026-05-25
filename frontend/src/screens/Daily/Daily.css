@@ -15,6 +15,23 @@
   left: 1.5rem;
 }
 
+.daily__skip {
+  background: none;
+  border: none;
+  color: #aaaaaa;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-top: 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.daily__skip:hover {
+  color: #666666;
+}
+
 .daily__content {
   display: flex;
   flex-direction: column;
