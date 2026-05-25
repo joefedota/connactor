@@ -124,9 +124,6 @@ export function Daily() {
           <button className="btn btn--daily btn--large" onClick={handleShare}>
             Share result
           </button>
-          <button className="btn btn--ghost btn--large" onClick={() => navigate('/')}>
-            Play a random game
-          </button>
         </div>
       </div>
     );
