@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkConnected } from '../../api/client';
 import { EntitySearch } from '../../components/EntitySearch';
+import { HowToPlayModal } from '../../components/HowToPlayModal';
 import { NodeChip } from '../../components/NodeChip';
 import { useGameStore } from '../../store/gameStore';
 import type { NodeInfo } from '../../types';
@@ -21,6 +22,19 @@ export function GameBoard() {
   }, [game, isLoading, navigate]);
 
   const [targetReachable, setTargetReachable] = useState(false);
+  const [showHowTo, setShowHowTo] = useState(false);
+  const howToChecked = useRef(false);
+
+  useEffect(() => {
+    if (howToChecked.current) return;
+    howToChecked.current = true;
+    if (!localStorage.getItem('connactor_howto_seen')) setShowHowTo(true);
+  }, []);
+
+  const handleCloseHowTo = () => {
+    localStorage.setItem('connactor_howto_seen', '1');
+    setShowHowTo(false);
+  };
 
   useEffect(() => {
     if (!game) return;
@@ -80,6 +94,9 @@ export function GameBoard() {
           )}
         </div>
         <div className="game-board__header-actions">
+          <button className="game-board__help-btn" onClick={() => setShowHowTo(true)} aria-label="How to play">
+            ?
+          </button>
           <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>
             Give Up
           </button>
@@ -160,6 +177,8 @@ export function GameBoard() {
             : `Type an actor who appeared in ${lastLabel}`;
         })()}
       </div>
+
+      {showHowTo && <HowToPlayModal onClose={handleCloseHowTo} />}
     </div>
   );
 }

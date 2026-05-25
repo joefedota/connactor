@@ -221,3 +221,25 @@
   color: #333333;
   border: 1px solid #C68DFE;
 }
+
+.game-board__help-btn {
+  background: none;
+  border: 1.5px solid #cccccc;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #888888;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.game-board__help-btn:hover {
+  border-color: #888888;
+  color: #444444;
+}
