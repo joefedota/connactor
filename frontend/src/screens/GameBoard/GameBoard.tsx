@@ -9,7 +9,7 @@ import './GameBoard.css';
 
 export function GameBoard() {
   const navigate = useNavigate();
-  const { game, isLoading, addNode, removeLastFromPath, submit, giveUp, endError, stepError } =
+  const { game, isLoading, addNode, removeLastFromPath, giveUp, endError, stepError } =
     useGameStore();
 
   useEffect(() => {
@@ -44,22 +44,16 @@ export function GameBoard() {
   const nextType: 'actor' | 'movie' =
     currentPath.length % 2 === 0 ? 'actor' : 'movie';
 
-  const lastNode = currentPath[currentPath.length - 1];
   const canClickTarget = targetReachable;
-  const canSubmit = lastNode.type === 'movie'; // must end on a movie to submit
 
   const handleSelect = async (node: NodeInfo) => {
-    await addNode(node);
+    const won = await addNode(node);
+    if (won) navigate('/results');
   };
 
   const handleTargetClick = async () => {
     if (!canClickTarget) return;
     const won = await addNode(target);
-    if (won) navigate('/results');
-  };
-
-  const handleSubmit = async () => {
-    const won = await submit();
     if (won) navigate('/results');
   };
 
@@ -82,11 +76,6 @@ export function GameBoard() {
           )}
         </div>
         <div className="game-board__header-actions">
-          {canSubmit && (
-            <button className="btn btn--primary btn--sm" onClick={handleSubmit}>
-              Submit
-            </button>
-          )}
           <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>
             Give Up
           </button>
