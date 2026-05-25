@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import time
 import uuid  # used in /game for ephemeral game_id
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -108,6 +109,15 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Connactor API", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def _log_request_timing(request: Request, call_next):
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - t0) * 1000
+    logger.info("TIMING %s %s %d %.0fms", request.method, request.url.path, response.status_code, ms)
+    return response
+
 app.add_middleware(UserIdentityMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -146,12 +156,14 @@ async def get_game(
     min_rank, max_rank = _DIFFICULTY_RANK_RANGE[difficulty] if difficulty else _DEFAULT_RANK_RANGE
     driver = request.app.state.neo4j
 
+    t0 = time.perf_counter()
     async with driver.session() as session:
         # Pick two random actors from the difficulty's rank tier in one indexed query,
         # then verify a path exists between them (capped at 12 hops). Most popular pairs
         # are 2-4 hops apart so this resolves in a single attempt; retry only if we
         # happen to pick a disconnected pair.
-        for _ in range(MAX_GAME_ATTEMPTS):
+        for attempt in range(MAX_GAME_ATTEMPTS):
+            t1 = time.perf_counter()
             result = await session.run(
                 f"""
                 MATCH (a:Actor) WHERE a.fame_rank >= $min_rank AND a.fame_rank < $max_rank
@@ -165,11 +177,13 @@ async def get_game(
                 max_rank=max_rank,
             )
             record = await result.single()
+            logger.info("TIMING /game attempt=%d neo4j=%.0fms", attempt + 1, (time.perf_counter() - t1) * 1000)
             if record is None:
                 continue
 
             source = record["source"]
             target = record["target"]
+            logger.info("TIMING /game total=%.0fms difficulty=%s", (time.perf_counter() - t0) * 1000, difficulty)
             return GameResponse(
                 game_id=str(uuid.uuid4()),
                 source=NodeInfo(
@@ -339,6 +353,7 @@ async def get_autocomplete(
 
     driver = request.app.state.neo4j
 
+    t0 = time.perf_counter()
     async with driver.session() as session:
         try:
             if type == "actor":
@@ -373,6 +388,7 @@ async def get_autocomplete(
             # Malformed Lucene query (e.g. user typed only escape-special chars) —
             # return empty rather than 500.
             return AutocompleteResponse(results=[])
+    logger.info("TIMING /autocomplete type=%s neo4j=%.0fms", type, (time.perf_counter() - t0) * 1000)
 
     results = []
     for rec in records:
@@ -406,6 +422,7 @@ async def get_autocomplete_neighbors(
 ):
     driver = request.app.state.neo4j
 
+    t0 = time.perf_counter()
     async with driver.session() as session:
         if type == "actor":
             # node_id is a movie — fetch its actors
@@ -429,6 +446,7 @@ async def get_autocomplete_neighbors(
             """
         result = await session.run(cypher, node_id=int(node_id), q=q, limit=limit)
         records = await result.data()
+    logger.info("TIMING /autocomplete/neighbors type=%s neo4j=%.0fms", type, (time.perf_counter() - t0) * 1000)
 
     results = []
     for rec in records:
@@ -576,6 +594,7 @@ async def get_daily(request: Request):
     driver = request.app.state.neo4j
     user_id: str = request.state.user_id
 
+    t0 = time.perf_counter()
     async with get_session() as session:
         row = await session.execute(
             text(
@@ -588,6 +607,7 @@ async def get_daily(request: Request):
             {"today": today},
         )
         puzzle = row.first()
+    logger.info("TIMING /daily pg_puzzle=%.0fms", (time.perf_counter() - t0) * 1000)
 
     if not puzzle:
         raise HTTPException(status_code=404, detail="No daily puzzle available yet.")
@@ -595,6 +615,7 @@ async def get_daily(request: Request):
     puzzle_id = str(puzzle.puzzle_id)
 
     # Neo4j actor fetches and Postgres completion+streak run in parallel.
+    t1 = time.perf_counter()
     (source_node, target_node), (comp, streak) = await asyncio.gather(
         asyncio.gather(
             _fetch_actor_node(driver, puzzle.source_id),
@@ -602,6 +623,7 @@ async def get_daily(request: Request):
         ),
         _get_completion_and_streak(user_id, puzzle_id),
     )
+    logger.info("TIMING /daily parallel(neo4j+pg_completion)=%.0fms", (time.perf_counter() - t1) * 1000)
 
     return DailyResponse(
         puzzle_date=today.isoformat(),
