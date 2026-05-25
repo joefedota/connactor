@@ -505,8 +505,8 @@ def render_html(
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#222;max-width:640px;margin:0 auto;padding:24px;">
-  <h2 style="margin:0 0 4px;">Connactor report — {(end - timedelta(days=1)).isoformat()}</h2>
-  <div style="color:#888;margin-bottom:24px;">Rolling 7-day window: {start.isoformat()} – {(end - timedelta(days=1)).isoformat()} (UTC)</div>
+  <h2 style="margin:0 0 4px;">Connactor report — {end.isoformat()}</h2>
+  <div style="color:#888;margin-bottom:24px;">Rolling 7-day window: {start.isoformat()} – {end.isoformat()} (UTC)</div>
 {players_html}
   <h3 style="margin-top:32px;">Web traffic</h3>
   <p style="margin:4px 0;">
@@ -642,7 +642,7 @@ def main() -> None:
         start=start, end=end,
         app=app_metrics,
     )
-    subject = f"Connactor report — {(end - timedelta(days=1)).isoformat()}"
+    subject = f"Connactor report — {end.isoformat()}"
 
     if args.dry_run:
         print(html)
