@@ -69,6 +69,7 @@ class DailyResponse(BaseModel):
     already_completed: bool
     completion: Optional[CompletionInfo] = None
     current_streak: int = 0
+    today_stats: Optional[DailyStats] = None  # percentiles; populated when already_completed
 
 
 class CompleteRequest(BaseModel):
@@ -78,6 +79,7 @@ class CompleteRequest(BaseModel):
     optimal_hops: Optional[int] = None  # required when puzzle_id is omitted
     hops: int
     time_ms: Optional[int] = None
+    path_ids: Optional[List[str]] = None  # ordered actor/movie IDs; used for path uniqueness
 
 
 class CompleteResponse(BaseModel):
@@ -86,6 +88,32 @@ class CompleteResponse(BaseModel):
     hops: int
     time_ms: Optional[int] = None
     completed_at: str
+
+
+class DailyStats(BaseModel):
+    """Percentile stats for today's puzzle — only populated when already_completed=True."""
+    answer_percentile: int        # better than X% of players today (by hop count)
+    speed_percentile: Optional[int] = None   # faster than X% (only if user has time_ms)
+    path_uniqueness: Optional[int] = None    # % of players who used the exact same path
+    total_players_today: int
+
+
+class DailyHistoryEntry(BaseModel):
+    puzzle_date: str              # YYYY-MM-DD
+    hops: int
+    time_ms: Optional[int] = None
+    is_best: bool                 # hops <= optimal_hops
+
+
+class DailyHistoryResponse(BaseModel):
+    entries: List[DailyHistoryEntry]   # newest first
+    bucket_1: int     # completions using exactly 1 actor
+    bucket_2: int
+    bucket_3: int
+    bucket_4: int
+    bucket_5: int
+    bucket_6_plus: int
+    total: int
 
 
 class HintRequest(BaseModel):

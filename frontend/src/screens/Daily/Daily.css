@@ -3,8 +3,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
+  justify-content: flex-start;
+  padding: 4rem 1.5rem 3rem;
   background: #FAF7F2;
   position: relative;
 }
@@ -133,6 +133,47 @@
 .daily__optimal-info {
   font-size: 0.8rem;
   color: #999;
+}
+
+/* ── Percentile pills ─────────────────────── */
+.daily__percentile-row {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f0ece4;
+}
+
+.daily__percentile-pill {
+  background: #FAF7F2;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 4.5rem;
+  flex: 1;
+}
+
+.daily__percentile-num {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #222;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily__percentile-label {
+  font-size: 0.65rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .daily__loading,

@@ -119,6 +119,7 @@ async def test_daily_already_completed(client):
     comp_row.hops = 2
     comp_row.time_ms = 15000
     comp_row.completed_at = datetime.datetime(2026, 5, 24, 12, 0, 0)
+    comp_row.path_ids = None
     # execute call 1 → completion row; execute call 2 → streak (today only)
     streak_result = MagicMock()
     streak_result.__iter__ = lambda self: iter([(today,)])
@@ -126,7 +127,19 @@ async def test_daily_already_completed(client):
     comp_result.first.return_value = comp_row
     session2.execute.side_effect = [comp_result, streak_result]
 
-    with _mock_pg(session1, session2):
+    # Session 3: today_stats percentile query
+    session3 = AsyncMock()
+    stats_row = MagicMock()
+    stats_row.total = 10
+    stats_row.better_than = 7
+    stats_row.has_time = 8
+    stats_row.slower_than = 5
+    stats_row.same_path = 2
+    stats_result = MagicMock()
+    stats_result.first.return_value = stats_row
+    session3.execute.return_value = stats_result
+
+    with _mock_pg(session1, session2, session3):
         resp = await client.get("/daily")
 
     assert resp.status_code == 200
@@ -136,6 +149,8 @@ async def test_daily_already_completed(client):
     assert body["current_streak"] == 1
     assert body["source"]["id"] == str(-3)
     assert body["target"]["id"] == str(-6)
+    assert body["today_stats"]["total_players_today"] == 10
+    assert body["today_stats"]["answer_percentile"] == 70  # floor(7/10 * 100)
 
 
 # ── POST /complete ─────────────────────────────────────────────────────────

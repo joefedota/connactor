@@ -61,6 +61,13 @@ export interface CompletionInfo {
   completed_at: string;
 }
 
+export interface DailyStats {
+  answer_percentile: number;
+  speed_percentile: number | null;
+  path_uniqueness: number | null;
+  total_players_today: number;
+}
+
 export interface DailyResponse {
   puzzle_date: string;
   puzzle_id: string;
@@ -70,6 +77,25 @@ export interface DailyResponse {
   already_completed: boolean;
   completion: CompletionInfo | null;
   current_streak: number;
+  today_stats?: DailyStats | null;
+}
+
+export interface DailyHistoryEntry {
+  puzzle_date: string;
+  hops: number;
+  time_ms: number | null;
+  is_best: boolean;
+}
+
+export interface DailyHistoryResponse {
+  entries: DailyHistoryEntry[];
+  bucket_1: number;
+  bucket_2: number;
+  bucket_3: number;
+  bucket_4: number;
+  bucket_5: number;
+  bucket_6_plus: number;
+  total: number;
 }
 
 export interface CompleteRequest {
@@ -79,6 +105,7 @@ export interface CompleteRequest {
   optimal_hops?: number;
   hops: number;
   time_ms?: number;
+  path_ids?: string[];
 }
 
 export interface CompleteResponse {

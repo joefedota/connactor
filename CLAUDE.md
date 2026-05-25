@@ -60,6 +60,12 @@ https://github.com/joefedota/connactor/projects
 - **Sentence case everywhere** — all button labels, headings, tooltips, error messages, and any other user-facing text use sentence case. e.g. "New game" not "New Game", "How to play" not "How to Play", "Give up" not "Give Up".
 - **No emojis anywhere in the UI** — no emojis in buttons, labels, badges, hints, headings, or any visible text. The only exception is the share text chain (🟡/🟣 dots), which is intentional product design.
 
+## Database schema assumptions
+
+**Never write code that defensively handles missing columns or tables.** Migrations run before deployment — if a column is in a migration, assume it exists. Nullable columns handle the case of rows created before the column was added (they'll have `NULL`); no try/except or conditional fallback is needed for that.
+
+Don't use bare `except Exception` (or similar) to swallow DB errors caused by schema mismatch. If a query fails, it should surface as an error, not silently fall back to a different query.
+
 ## Query testing
 
 **Always run new SQL and Cypher queries against a live database before committing.** Never rely solely on reading the query to verify correctness — syntax rules vary by DB version and errors only surface at runtime.
