@@ -5,6 +5,7 @@ import type {
   DailyHistoryResponse,
   DailyResponse,
   GameResponse,
+  HintResponse,
   SolveResponse,
   ValidateResponse,
 } from '../types';
@@ -92,4 +93,16 @@ export function submitComplete(body: CompleteRequest): Promise<CompleteResponse>
 
 export function fetchDailyHistory(): Promise<DailyHistoryResponse> {
   return request('/daily/history', { credentials: 'include' });
+}
+
+export function requestHint(body: {
+  target_id: string;
+  last_node_id: string;
+  last_node_type: string;
+  excluded_ids: string[];
+}): Promise<HintResponse> {
+  return request('/hint', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }

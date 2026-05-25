@@ -21,12 +21,13 @@ function buildDailyShareText(
   hops: number,
   optimalHops: number,
   timeMs: number | undefined,
+  hintsUsed: number,
 ): string {
   const actors = Math.ceil(hops / 2) - 1;
   const optimalActors = Math.ceil(optimalHops / 2) - 1;
   const chain = buildChain(hops);
   const timePart = timeMs != null ? ` in ${formatTime(timeMs)}` : '';
-  const statusPart = actors <= optimalActors ? ' · ✓ best answer!' : ` · (best: ${optimalActors})`;
+  const statusPart = actors <= optimalActors && hintsUsed === 0 ? ' · ✓ best answer!' : ` · (best: ${optimalActors})`;
   return `Connactor Daily · ${date}\n\n${source} → ${target}\n\n${chain}\n${actors} actor${actors !== 1 ? 's' : ''}${timePart}${statusPart}\n\nconnactor.com/daily`;
 }
 
@@ -36,8 +37,9 @@ function buildRandomShareText(
   playerActors: number,
   optimalActors: number,
   isOptimal: boolean | null,
+  hintsUsed: number,
 ) {
-  const statusLine = isOptimal
+  const statusLine = isOptimal && hintsUsed === 0
     ? '✓ best answer!'
     : `Best: ${optimalActors} actor${optimalActors !== 1 ? 's' : ''}`;
   return `Connactor\n${source} → ${target}\n${playerActors} actor${playerActors !== 1 ? 's' : ''} — ${statusLine}`;
@@ -64,6 +66,8 @@ export function Results() {
   const optimalActors = allPaths && allPaths.length > 0 ? actorCount(allPaths[0].length) : playerActors;
   const won = status === 'won';
   const reachedTarget = currentPath[currentPath.length - 1]?.id === target.id;
+  const hintsUsed = game.hintsUsed ?? 0;
+  const effectivelyOptimal = isOptimal && hintsUsed === 0;
 
   const handlePlayAgain = () => {
     const nextDifficulty = game.requestedDifficulty;
@@ -91,9 +95,9 @@ export function Results() {
       const date = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const hops = currentPath.length - 1;
       const optimalHops = dailyData?.optimal_hops ?? (optimalActors + 1) * 2;
-      text = buildDailyShareText(date, source.label, target.label, hops, optimalHops, game.completionTimeMs);
+      text = buildDailyShareText(date, source.label, target.label, hops, optimalHops, game.completionTimeMs, hintsUsed);
     } else {
-      text = buildRandomShareText(source.label, target.label, playerActors, optimalActors, isOptimal);
+      text = buildRandomShareText(source.label, target.label, playerActors, optimalActors, isOptimal, hintsUsed);
     }
     try {
       await navigator.clipboard.writeText(text);
@@ -115,10 +119,15 @@ export function Results() {
             <div className="results__outcome-title">Connacted!</div>
             <div className="results__outcome-sub">
               {playerActors} actor{playerActors !== 1 ? 's' : ''}
-              {isOptimal ? ' — best answer!' : ''}
+              {effectivelyOptimal ? ' — best answer!' : ''}
             </div>
             {game.completionTimeMs != null && (
               <div className="results__time">{formatTime(game.completionTimeMs)}</div>
+            )}
+            {hintsUsed > 0 && (
+              <div className="results__hints-used">
+                Used {hintsUsed} hint{hintsUsed !== 1 ? 's' : ''}
+              </div>
             )}
           </>
         ) : (
@@ -139,8 +148,8 @@ export function Results() {
             {optimalActors} actor{optimalActors !== 1 ? 's' : ''}
           </span>
           {won && reachedTarget && (
-            <span className={`results__optimal-delta ${isOptimal ? 'results__optimal-delta--even' : 'results__optimal-delta--over'}`}>
-              {isOptimal ? 'You matched it!' : `You used ${playerActors - optimalActors} extra`}
+            <span className={`results__optimal-delta ${effectivelyOptimal ? 'results__optimal-delta--even' : 'results__optimal-delta--over'}`}>
+              {effectivelyOptimal ? 'You matched it!' : `You used ${playerActors - optimalActors} extra`}
             </span>
           )}
         </div>

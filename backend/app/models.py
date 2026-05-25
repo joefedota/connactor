@@ -114,3 +114,14 @@ class DailyHistoryResponse(BaseModel):
     bucket_5: int
     bucket_6_plus: int
     total: int
+
+
+class HintRequest(BaseModel):
+    target_id: str
+    last_node_id: str
+    last_node_type: str           # 'actor' | 'movie'
+    excluded_ids: List[str] = []  # hint IDs already shown; skip these
+
+
+class HintResponse(BaseModel):
+    hint: NodeInfo

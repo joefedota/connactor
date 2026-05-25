@@ -90,29 +90,7 @@ export function Daily() {
   }
   if (resolvedDaily?.already_completed && resolvedDaily.completion) {
     const { puzzle_date, completion, optimal_hops, source, target, current_streak } = resolvedDaily;
-    // TODO: remove mock data once backend is deployed
-    const today_stats = resolvedDaily.today_stats ?? {
-      answer_percentile: 73,
-      speed_percentile: 61,
-      path_uniqueness: 18,
-      total_players_today: 42,
-    };
-    const mockHistoryData = historyData ?? {
-      entries: [
-        { puzzle_date: '2026-05-25', hops: 2, time_ms: 15000, is_best: true },
-        { puzzle_date: '2026-05-24', hops: 4, time_ms: 32000, is_best: true },
-        { puzzle_date: '2026-05-23', hops: 6, time_ms: 58000, is_best: false },
-        { puzzle_date: '2026-05-22', hops: 4, time_ms: 27000, is_best: true },
-        { puzzle_date: '2026-05-21', hops: 8, time_ms: 91000, is_best: false },
-      ],
-      bucket_1: 3,
-      bucket_2: 8,
-      bucket_3: 5,
-      bucket_4: 2,
-      bucket_5: 1,
-      bucket_6_plus: 0,
-      total: 5,
-    };
+    const today_stats = resolvedDaily.today_stats ?? null;
     const [y, m, d] = puzzle_date.split('-').map(Number);
     const formattedDate = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const shareText = buildShareText(formattedDate, source.label, target.label, completion.hops, optimal_hops, completion.time_ms);
@@ -189,8 +167,8 @@ export function Daily() {
             Share result
           </button>
 
-          {mockHistoryData.total > 0 && (
-            <DailyHistory data={mockHistoryData} />
+          {historyData && historyData.total > 0 && (
+            <DailyHistory data={historyData} />
           )}
         </div>
       </div>

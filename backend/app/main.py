@@ -5,6 +5,7 @@ Endpoints:
   GET  /game                                    — random actor pair
   POST /validate                                — validate user's current path
   POST /solve                                   — all optimal paths (give up / end)
+  POST /hint                                    — next hint node given player's position
   GET  /autocomplete?q=...&type=actor|movie     — prefix search (unconstrained)
   GET  /autocomplete/neighbors?node_id=...&type=actor|movie  — neighbors of a node
   GET  /connected?a=...&b=...                   — edge existence check
@@ -42,6 +43,8 @@ from app.models import (
     DailyStats,
     Difficulty,
     GameResponse,
+    HintRequest,
+    HintResponse,
     NodeInfo,
     SolveRequest,
     SolveResponse,
@@ -344,6 +347,92 @@ async def post_solve(request: Request, body: SolveRequest):
 
     paths.sort(key=_path_fame_key)
     return SolveResponse(hop_count=hop_count, paths=paths[:10])
+
+
+@app.post("/hint", response_model=HintResponse)
+async def post_hint(request: Request, body: HintRequest):
+    driver = request.app.state.neo4j
+    target_id = int(body.target_id)
+    last_id = int(body.last_node_id)
+    excluded = body.excluded_ids
+
+    async with driver.session() as session:
+        if body.last_node_type == "actor":
+            # Primary: next movie on an optimal path from last actor to target
+            result = await session.run(
+                """
+                MATCH p = allShortestPaths(
+                    (last:Actor {person_id: $last_id})-[:APPEARED_IN*..12]-(t:Actor {person_id: $target_id})
+                )
+                WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
+                  OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
+                WITH nodes(p)[1] AS m
+                WHERE NOT toString(m.movie_id) IN $excluded
+                WITH DISTINCT m ORDER BY m.vote_count DESC
+                RETURN {type: 'movie', id: toString(m.movie_id), label: m.title,
+                        year: toString(m.year), image_path: m.poster_path} AS hint
+                LIMIT 1
+                """,
+                last_id=last_id,
+                target_id=target_id,
+                excluded=excluded,
+            )
+            record = await result.single()
+            if not record:
+                # Fallback: most popular valid movie connected to this actor
+                result = await session.run(
+                    """
+                    MATCH (a:Actor {person_id: $last_id})-[:APPEARED_IN]->(m:Movie)
+                    WHERE coalesce(m.vote_count, 0) >= 100 AND NOT 99 IN coalesce(m.genre_ids, [])
+                    AND NOT toString(m.movie_id) IN $excluded
+                    RETURN {type: 'movie', id: toString(m.movie_id), label: m.title,
+                            year: toString(m.year), image_path: m.poster_path} AS hint
+                    ORDER BY m.popularity DESC LIMIT 1
+                    """,
+                    last_id=last_id,
+                    excluded=excluded,
+                )
+                record = await result.single()
+        else:
+            # Primary: best actor in last movie who has a short path to target
+            result = await session.run(
+                """
+                MATCH (m:Movie {movie_id: $last_id})<-[:APPEARED_IN]-(a:Actor),
+                      p = allShortestPaths((a)-[:APPEARED_IN*..12]-(t:Actor {person_id: $target_id}))
+                WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
+                  OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
+                AND NOT toString(a.person_id) IN $excluded
+                WITH a, length(p) AS hops
+                ORDER BY hops ASC, a.fame_rank ASC
+                LIMIT 1
+                RETURN {type: 'actor', id: toString(a.person_id), label: a.name,
+                        popularity: a.popularity, image_path: a.profile_path,
+                        fame_rank: a.fame_rank} AS hint
+                """,
+                last_id=last_id,
+                target_id=target_id,
+                excluded=excluded,
+            )
+            record = await result.single()
+            if not record:
+                # Fallback: most famous actor in that movie
+                result = await session.run(
+                    """
+                    MATCH (m:Movie {movie_id: $last_id})<-[:APPEARED_IN]-(a:Actor)
+                    WHERE NOT toString(a.person_id) IN $excluded
+                    RETURN {type: 'actor', id: toString(a.person_id), label: a.name,
+                            popularity: a.popularity, image_path: a.profile_path,
+                            fame_rank: a.fame_rank} AS hint
+                    ORDER BY a.fame_rank ASC LIMIT 1
+                    """,
+                    last_id=last_id,
+                    excluded=excluded,
+                )
+                record = await result.single()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="No hint available.")
+    return HintResponse(hint=NodeInfo(**record["hint"]))
 
 
 @app.get("/autocomplete", response_model=AutocompleteResponse)
