@@ -313,7 +313,7 @@ async def post_solve(request: Request, body: SolveRequest):
                 WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
             END] AS path,
             length(p) AS hops
-            LIMIT 10
+            LIMIT 50
             """,
             source=int(body.source_id),
             target=int(body.target_id),
@@ -338,7 +338,7 @@ async def post_solve(request: Request, body: SolveRequest):
         return sum(ranks) / len(ranks) if ranks else float("inf")
 
     paths.sort(key=_path_fame_key)
-    return SolveResponse(hop_count=hop_count, paths=paths)
+    return SolveResponse(hop_count=hop_count, paths=paths[:10])
 
 
 @app.get("/autocomplete", response_model=AutocompleteResponse)
