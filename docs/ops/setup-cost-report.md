@@ -82,6 +82,8 @@ done
 
 ## Create the job
 
+Note: the `^|^` prefix on `--set-env-vars` changes the delimiter from comma to `|`, which lets `REPORT_RECIPIENT` hold a comma-separated list of email addresses.
+
 ```bash
 gcloud run jobs create connactor-cost-report \
   --project connactor-497019 \
@@ -89,7 +91,7 @@ gcloud run jobs create connactor-cost-report \
   --region us-central1 \
   --service-account connactor-api@connactor-497019.iam.gserviceaccount.com \
   --set-secrets "CLOUDFLARE_API_TOKEN=cloudflare-api-token:latest,RESEND_API_KEY=resend-api-key:latest" \
-  --set-env-vars "GCP_PROJECT=connactor-497019,BILLING_DATASET=billing_export,BILLING_TABLE=gcp_billing_export_resource_v1_017EE0_4F04E9_9FCF85,CLOUDFLARE_ACCOUNT_ID=<account-id>,CLOUDFLARE_ZONE_TAG=<zone-tag>,REPORT_RECIPIENT=joefedota@gmail.com,REPORT_SENDER=reports@connactor.com" \
+  --set-env-vars "^|^GCP_PROJECT=connactor-497019|BILLING_DATASET=billing_export|BILLING_TABLE=gcp_billing_export_resource_v1_017EE0_4F04E9_9FCF85|CLOUDFLARE_ACCOUNT_ID=<account-id>|CLOUDFLARE_ZONE_TAG=<zone-tag>|REPORT_RECIPIENT=joefedota@gmail.com,chunisabel@gmail.com|REPORT_SENDER=reports@connactor.com" \
   --memory 512Mi \
   --cpu 1 \
   --task-timeout 600 \

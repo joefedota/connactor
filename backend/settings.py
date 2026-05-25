@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     cloudflare_account_id: str = ""
     cloudflare_zone_tag: str = ""
     resend_api_key: str = ""
-    report_recipient: str = "joefedota@gmail.com"
+    # Comma-separated list of recipients for the daily cost+usage report.
+    report_recipient: str = "joefedota@gmail.com,chunisabel@gmail.com"
     report_sender: str = "reports@connactor.com"
 
 
