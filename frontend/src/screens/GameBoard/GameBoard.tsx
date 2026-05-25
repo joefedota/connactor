@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { formatTime } from '../../utils/formatTime';
 import { useNavigate } from 'react-router-dom';
 import { checkConnected } from '../../api/client';
 import { EntitySearch } from '../../components/EntitySearch';
@@ -22,6 +23,7 @@ export function GameBoard() {
   }, [game, isLoading, navigate]);
 
   const [targetReachable, setTargetReachable] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [showHowTo, setShowHowTo] = useState(false);
   const howToChecked = useRef(false);
 
@@ -35,6 +37,12 @@ export function GameBoard() {
     localStorage.setItem('connactor_howto_seen', '1');
     setShowHowTo(false);
   };
+
+  useEffect(() => {
+    if (!game || game.status !== 'playing' || !game.startedAt) return;
+    const id = setInterval(() => setElapsed(Date.now() - game.startedAt!), 1000);
+    return () => clearInterval(id);
+  }, [game?.status, game?.startedAt]);
 
   useEffect(() => {
     if (!game) return;
@@ -93,6 +101,9 @@ export function GameBoard() {
             </span>
           )}
         </div>
+        {game.startedAt && (
+          <span className="game-board__timer">{formatTime(elapsed)}</span>
+        )}
         <div className="game-board__header-actions">
           <button className="game-board__help-btn" onClick={() => setShowHowTo(true)} aria-label="How to play">
             ?

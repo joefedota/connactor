@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PathDisplay } from '../../components/PathDisplay';
 import { useGameStore } from '../../store/gameStore';
+import { formatTime } from '../../utils/formatTime';
 import './Results.css';
 
 // intermediate actors = total actors minus start and end
@@ -9,7 +10,27 @@ function actorCount(pathLength: number): number {
   return Math.ceil(pathLength / 2) - 2;
 }
 
-function buildShareText(
+function buildChain(hops: number): string {
+  return Array.from({ length: hops + 1 }, (_, i) => i % 2 === 0 ? '🟡' : '🟣').join('');
+}
+
+function buildDailyShareText(
+  date: string,
+  source: string,
+  target: string,
+  hops: number,
+  optimalHops: number,
+  timeMs: number | undefined,
+): string {
+  const actors = Math.ceil(hops / 2) - 1;
+  const optimalActors = Math.ceil(optimalHops / 2) - 1;
+  const chain = buildChain(hops);
+  const timePart = timeMs != null ? ` in ${formatTime(timeMs)}` : '';
+  const statusPart = actors <= optimalActors ? ' · ✓ best answer!' : ` · (best: ${optimalActors})`;
+  return `Connactor Daily · ${date}\n\n${source} → ${target}\n\n${chain}\n${actors} actor${actors !== 1 ? 's' : ''}${timePart}${statusPart}\n\nconnactor.com/daily`;
+}
+
+function buildRandomShareText(
   source: string,
   target: string,
   playerActors: number,
@@ -17,7 +38,7 @@ function buildShareText(
   isOptimal: boolean | null,
 ) {
   const statusLine = isOptimal
-    ? '✓ Optimal!'
+    ? '✓ best answer!'
     : `Best: ${optimalActors} actor${optimalActors !== 1 ? 's' : ''}`;
   return `Connactor\n${source} → ${target}\n${playerActors} actor${playerActors !== 1 ? 's' : ''} — ${statusLine}`;
 }
@@ -60,11 +81,14 @@ export function Results() {
   const handleShare = async () => {
     let text: string;
     if (game.isDailyChallenge) {
-      const date = dailyData?.puzzle_date ?? new Date().toISOString().slice(0, 10);
-      const tag = isOptimal ? ' ✓' : '';
-      text = `Connactor Daily — ${date}\n${playerActors} actor${playerActors !== 1 ? 's' : ''}${tag}\nconnactor.com/daily`;
+      const rawDate = dailyData?.puzzle_date ?? new Date().toISOString().slice(0, 10);
+      const [y, m, d] = rawDate.split('-').map(Number);
+      const date = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const hops = currentPath.length - 1;
+      const optimalHops = dailyData?.optimal_hops ?? (optimalActors + 1) * 2;
+      text = buildDailyShareText(date, source.label, target.label, hops, optimalHops, game.completionTimeMs);
     } else {
-      text = buildShareText(source.label, target.label, playerActors, optimalActors, isOptimal);
+      text = buildRandomShareText(source.label, target.label, playerActors, optimalActors, isOptimal);
     }
     try {
       await navigator.clipboard.writeText(text);
@@ -88,6 +112,9 @@ export function Results() {
               {playerActors} actor{playerActors !== 1 ? 's' : ''}
               {isOptimal ? ' — best answer!' : ''}
             </div>
+            {game.completionTimeMs != null && (
+              <div className="results__time">{formatTime(game.completionTimeMs)}</div>
+            )}
           </>
         ) : (
           <div className="results__outcome-title results__outcome-title--gave-up">
