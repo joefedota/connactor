@@ -70,7 +70,10 @@ jobs:
           gcloud run jobs update "$COST_REPORT_JOB" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
-            --image "$IMAGE_REPO:${{ github.sha }}"
+            --image "$IMAGE_REPO:${{ github.sha }}" \
+            --update-secrets="DATABASE_URL=DATABASE_URL:latest" \
+            --update-env-vars="REPORT_SENDER=reports@connactor.com" \
+            --update-env-vars="^|^REPORT_RECIPIENT=joefedota@gmail.com,chunisabel@gmail.com"
 
       - name: Roll daily-puzzle job to new image
         run: |
