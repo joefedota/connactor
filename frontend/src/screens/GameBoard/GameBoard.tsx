@@ -11,7 +11,7 @@ import './GameBoard.css';
 
 export function GameBoard() {
   const navigate = useNavigate();
-  const { game, isLoading, addNode, removeLastFromPath, flipActors, giveUp, endError, stepError } =
+  const { game, isLoading, addNode, removeLastFromPath, flipActors, giveUp, endError, stepError, requestHint } =
     useGameStore();
 
   useEffect(() => {
@@ -67,6 +67,8 @@ export function GameBoard() {
     currentPath.length % 2 === 0 ? 'actor' : 'movie';
 
   const canClickTarget = targetReachable;
+  const MAX_HINTS = 3;
+  const hintsLeft = MAX_HINTS - (game?.hintsUsed ?? 0);
 
   const handleSelect = async (node: NodeInfo) => {
     const won = await addNode(node);
@@ -185,6 +187,32 @@ export function GameBoard() {
             : `Type an actor who appeared in ${lastLabel}`;
         })()}
       </div>
+
+      {game.status === 'playing' && (
+        <div className="game-board__hint-section">
+          {game.currentHint ? (
+            <div className="game-board__hint-reveal">
+              <span className="game-board__hint-icon">💡</span>
+              <div onClick={() => handleSelect(game.currentHint!)} style={{ cursor: 'pointer' }}>
+                <NodeChip node={game.currentHint} noPhoto />
+              </div>
+              {hintsLeft > 0 && (
+                <button className="game-board__hint-reroll" onClick={() => requestHint()}>
+                  Try another
+                </button>
+              )}
+            </div>
+          ) : hintsLeft > 0 ? (
+            <button className="game-board__hint-btn" onClick={() => requestHint()}>
+              💡 Get hint ({hintsLeft} left)
+            </button>
+          ) : (
+            <span className="game-board__hints-used">
+              {game.hintsUsed} hint{game.hintsUsed !== 1 ? 's' : ''} used
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="game-board__give-up">
         <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>

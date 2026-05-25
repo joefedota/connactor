@@ -86,3 +86,14 @@ class CompleteResponse(BaseModel):
     hops: int
     time_ms: Optional[int] = None
     completed_at: str
+
+
+class HintRequest(BaseModel):
+    target_id: str
+    last_node_id: str
+    last_node_type: str           # 'actor' | 'movie'
+    excluded_ids: List[str] = []  # hint IDs already shown; skip these
+
+
+class HintResponse(BaseModel):
+    hint: NodeInfo

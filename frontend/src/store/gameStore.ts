@@ -29,6 +29,7 @@ interface GameStore {
   submit: () => Promise<boolean>;
   giveUp: () => Promise<void>;
   resetGame: () => void;
+  requestHint: () => Promise<void>;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -66,6 +67,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             puzzleId: cached.puzzle_id,
             optimalHops: cached.optimal_hops,
             startedAt: Date.now(),
+            hintsUsed: 0,
+            currentHint: null,
+            shownHintIds: [],
           },
         });
       }
@@ -90,6 +94,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
             puzzleId: daily.puzzle_id,
             optimalHops: daily.optimal_hops,
             startedAt: Date.now(),
+            hintsUsed: 0,
+            currentHint: null,
+            shownHintIds: [],
           },
           isLoading: false,
         });
@@ -151,6 +158,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           difficulty: resp.difficulty,
           requestedDifficulty: difficulty,
           startedAt: Date.now(),
+          hintsUsed: 0,
+          currentHint: null,
+          shownHintIds: [],
         },
         isLoading: false,
       });
@@ -183,7 +193,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const newPath = [...game.currentPath, node];
-    set({ game: { ...game, currentPath: newPath }, endError: null, stepError: null });
+    set({ game: { ...game, currentPath: newPath, currentHint: null }, endError: null, stepError: null });
 
     // Only check completion when the target actor is reached
     if (node.type !== 'actor' || node.id !== game.target.id) return false;
@@ -226,7 +236,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!game || game.status !== 'playing') return;
     if (game.currentPath.length <= 1) return;
     set({
-      game: { ...game, currentPath: game.currentPath.slice(0, -1) },
+      game: { ...game, currentPath: game.currentPath.slice(0, -1), currentHint: null },
       endError: null,
       stepError: null,
     });
@@ -314,4 +324,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetGame: () => set({ game: null, endError: null, stepError: null }),
+
+  requestHint: async () => {
+    const { game } = get();
+    if (!game || game.status !== 'playing') return;
+    if ((game.hintsUsed ?? 0) >= 3) return;
+    const lastNode = game.currentPath[game.currentPath.length - 1];
+    try {
+      const resp = await api.requestHint({
+        target_id: game.target.id,
+        last_node_id: lastNode.id,
+        last_node_type: lastNode.type,
+        excluded_ids: game.shownHintIds ?? [],
+      });
+      set({
+        game: {
+          ...game,
+          hintsUsed: (game.hintsUsed ?? 0) + 1,
+          currentHint: resp.hint,
+          shownHintIds: [...(game.shownHintIds ?? []), resp.hint.id],
+        },
+      });
+    } catch {
+      // best-effort; don't block the player
+    }
+  },
 }));

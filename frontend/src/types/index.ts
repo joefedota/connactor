@@ -26,6 +26,10 @@ export interface GameState {
   optimalHops?: number;      // known for daily games from GET /daily
   startedAt?: number;        // Date.now() when game started; used to compute time_ms
   completionTimeMs?: number; // elapsed ms at win; set when status transitions to 'won'
+  // Hints
+  hintsUsed?: number;             // count of hints consumed this game
+  currentHint?: NodeInfo | null;  // currently revealed hint; cleared on any move
+  shownHintIds?: string[];        // all hint IDs revealed (passed as excluded_ids to /hint)
 }
 
 export interface ValidateResponse {
@@ -83,4 +87,8 @@ export interface CompleteResponse {
   hops: number;
   time_ms: number | null;
   completed_at: string;
+}
+
+export interface HintResponse {
+  hint: NodeInfo;
 }
