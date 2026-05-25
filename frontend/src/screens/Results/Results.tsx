@@ -81,7 +81,7 @@ export function Results() {
             <div className="results__outcome-title">Connacted!</div>
             <div className="results__outcome-sub">
               {playerActors} actor{playerActors !== 1 ? 's' : ''}
-              {isOptimal ? ' — optimal!' : ''}
+              {isOptimal ? ' — best answer!' : ''}
             </div>
           </>
         ) : (
