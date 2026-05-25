@@ -30,13 +30,13 @@ TMDB API
 
 ## Data Pipeline
 
-### Initial Full Load (~4–6 hours, run once)
+### Full Load (~30–45 min, runs nightly)
 
-1. Download TMDB daily movie ID export (`files.tmdb.org/p/exports/movie_ids_MM_DD_YYYY.json.gz`)
-2. Filter at the export to `adult=false` and `popularity > 0.1` (~100–200k candidates) — a deliberately loose net since TMDB's `popularity` is a daily-decaying engagement score, not a quality proxy
-3. Async crawl `/movie/{id}` and `/movie/{id}/credits` at ~35 req/s for all candidates (`vote_count` only ships on the per-movie endpoint, not in the daily export)
-4. Async crawl `/person/{id}` for all unique person IDs
-5. Bulk load into Neo4j via Python neo4j driver using `MERGE` in batches. **The Movie node load filters by `vote_count > 100` (with a `popularity > 1.0` grace window for brand-new movies that haven't accumulated votes yet) — see `_should_load_movie` in `load_neo4j.py`.** End state: ~16–18k high-signal Movie nodes. (Why a two-stage filter: the TMDB daily export only exposes `popularity`; vote_count lives on the per-movie crawl. A loose popularity gate at export time + a strict vote_count gate at load time keeps catalog hits like *The Internship* (2013, popularity 0.2, votes 4,471) while excluding the long tail of obscure new releases.)
+1. Build candidate list via TMDB's **`/discover/movie?vote_count.gte=100`** endpoint, year-sharded across 1920 → current year + 1 (~107 years) to stay under TMDB's 500-page-per-query pagination cap. Returns ~22k movies in ~4 min. See `pipeline/ingest/build_candidate_list.py`.
+2. Async crawl `/movie/{id}` at ~35 req/s for `runtime` and `belongs_to_collection` (the only fields not surfaced by Discover that we need; `collection_id` from `belongs_to_collection` is load-bearing for franchise dedup in fame_rank)
+3. Async crawl `/movie/{id}/credits` at ~35 req/s for all candidates
+4. Async crawl `/person/{id}` for all unique person IDs (checkpointed; only fetches new ones)
+5. Bulk load into Neo4j via Python neo4j driver using `MERGE` in batches. `_should_load_movie` in `load_neo4j.py` keeps a defense-in-depth `vote_count > 100` filter. End state: ~22k high-signal Movie nodes. (Why Discover instead of the daily export: the export only exposes `popularity`, a daily-decaying engagement score — bad signal for static-catalog filtering. Discover lets us filter by `vote_count` directly, which is the stable "people have heard of this" signal. This change replaced the previous daily-export pipeline in #91.)
 
 ### Daily Delta Refresh (cron, 9 AM UTC)
 
