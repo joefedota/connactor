@@ -19,7 +19,7 @@ interface GameStore {
 
   fetchGame: (difficulty?: string, theme?: Theme) => Promise<void>;
   fetchDailyGame: () => Promise<DailyResponse | null>;
-  submitCompletion: (hops: number, timeMs?: number) => Promise<void>;
+  submitCompletion: (hops: number, timeMs?: number, optimalHops?: number) => Promise<void>;
   addNode: (node: NodeInfo) => Promise<boolean>;
   removeLastFromPath: () => void;
   submit: () => Promise<boolean>;
@@ -68,18 +68,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  submitCompletion: async (hops: number, timeMs?: number) => {
+  submitCompletion: async (hops: number, timeMs?: number, optimalHops?: number) => {
     const { game } = get();
     if (!game) return;
     try {
       if (game.isDailyChallenge && game.puzzleId) {
         await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs });
       } else {
-        if (!game.optimalHops) return;
+        // optimalHops is passed from the solve response at call sites; game.optimalHops
+        // is only set for daily games, so we must use the passed-in value for random games.
+        const resolvedOptimalHops = optimalHops ?? game.optimalHops;
+        if (!resolvedOptimalHops) return;
         await api.submitComplete({
           source_id: game.source.id,
           target_id: game.target.id,
-          optimal_hops: game.optimalHops,
+          optimal_hops: resolvedOptimalHops,
           hops,
           time_ms: timeMs,
         });
@@ -167,7 +170,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
-      get().submitCompletion(playerHops, timeMs);
+      get().submitCompletion(playerHops, timeMs, solveResp.hop_count);
       return true;
     } catch {
       return false;
@@ -223,7 +226,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
-      get().submitCompletion(playerHops, timeMs);
+      get().submitCompletion(playerHops, timeMs, solveResp.hop_count);
       return true;
     } catch (e: unknown) {
       set({ endError: String(e) });

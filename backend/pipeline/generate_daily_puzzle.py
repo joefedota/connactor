@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Daily puzzle generator — run once per day via Cloud Scheduler.
 
-Picks a medium-difficulty actor pair (both fame_rank 50–200) with a verified
-shortest path of 3–5 hops and upserts it into the puzzles table as tomorrow's
-daily puzzle.
+Picks a medium-difficulty actor pair (both fame_rank 50–200) and upserts it
+into the puzzles table as tomorrow's daily puzzle.
 
 Usage:
     cd backend

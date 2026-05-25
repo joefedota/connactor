@@ -13,6 +13,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 import uuid  # used in /game for ephemeral game_id
@@ -511,7 +512,11 @@ async def _fetch_actor_node(driver, person_id: int) -> NodeInfo:
 
 
 async def _compute_streak(session, user_id: str) -> int:
-    """Count consecutive daily completions ending today (UTC)."""
+    """Count consecutive daily completions ending today or yesterday (UTC).
+
+    Counts from yesterday when today hasn't been played yet so the streak
+    doesn't drop to 0 mid-day.
+    """
     rows = await session.execute(
         text(
             """
@@ -531,8 +536,13 @@ async def _compute_streak(session, user_id: str) -> int:
         return 0
 
     today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    # If the most recent play was before yesterday the streak is broken.
+    if dates[0] not in (today, yesterday):
+        return 0
+
     streak = 0
-    expected = today
+    expected = dates[0]
     for d in dates:
         if d == expected:
             streak += 1
@@ -565,7 +575,10 @@ async def get_daily(request: Request):
         raise HTTPException(status_code=404, detail="No daily puzzle available yet.")
 
     puzzle_id = str(puzzle.puzzle_id)
-    source_node, target_node = await _fetch_actor_node(driver, puzzle.source_id), await _fetch_actor_node(driver, puzzle.target_id)
+    source_node, target_node = await asyncio.gather(
+        _fetch_actor_node(driver, puzzle.source_id),
+        _fetch_actor_node(driver, puzzle.target_id),
+    )
 
     async with get_session() as session:
         comp_row = await session.execute(

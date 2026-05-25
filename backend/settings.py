@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://connactor:connactorpassword@localhost:5432/connactor"
     # Used to sign the anonymous user identity cookie
     cookie_secret: str = "dev-cookie-secret-change-in-prod"
+    # Set True in prod (Cloud Run is always HTTPS; False lets local HTTP dev work)
+    cookie_secure: bool = False
 
     # Cost + usage report (scripts/cost_report.py)
     billing_dataset: str = "billing_export"

@@ -70,7 +70,7 @@ class UserIdentityMiddleware(BaseHTTPMiddleware):
                 max_age=_COOKIE_MAX_AGE,
                 httponly=True,
                 samesite="lax",
-                secure=False,  # set to True in prod (HTTPS only)
+                secure=settings.cookie_secure,
             )
 
         return response

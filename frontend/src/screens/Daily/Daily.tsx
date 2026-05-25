@@ -33,6 +33,9 @@ export function Daily() {
         navigate('/game');
       }
     });
+    // started.current guards against double-invocation (React Strict Mode);
+    // exhaustive-deps is intentionally suppressed — this must run once only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (isLoading) {

@@ -24,7 +24,7 @@ function buildShareText(
 
 export function Results() {
   const navigate = useNavigate();
-  const { game, theme, resetGame, fetchGame } = useGameStore();
+  const { game, theme, resetGame, fetchGame, dailyData } = useGameStore();
   const [showAllPaths, setShowAllPaths] = useState(false);
 
   useEffect(() => {
@@ -53,7 +53,14 @@ export function Results() {
   };
 
   const handleShare = async () => {
-    const text = buildShareText(source.label, target.label, playerActors, optimalActors, isOptimal);
+    let text: string;
+    if (game.isDailyChallenge) {
+      const date = dailyData?.puzzle_date ?? new Date().toISOString().slice(0, 10);
+      const tag = isOptimal ? ' ✓' : '';
+      text = `Connactor Daily — ${date}\n${playerActors} actor${playerActors !== 1 ? 's' : ''}${tag}\nconnactor.com/daily`;
+    } else {
+      text = buildShareText(source.label, target.label, playerActors, optimalActors, isOptimal);
+    }
     try {
       await navigator.clipboard.writeText(text);
       alert('Copied to clipboard!');
