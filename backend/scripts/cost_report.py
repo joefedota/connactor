@@ -372,12 +372,15 @@ def render_html(
 # ---------- email ----------
 
 def send_email(html: str, subject: str) -> None:
+    # Comma-separated list, e.g. "alice@x.com,bob@y.com". Resend's `to` field
+    # accepts up to 50 recipients per email.
+    recipients = [addr.strip() for addr in settings.report_recipient.split(",") if addr.strip()]
     r = httpx.post(
         RESEND_API,
         headers={"Authorization": f"Bearer {settings.resend_api_key}", "Content-Type": "application/json"},
         json={
             "from": settings.report_sender,
-            "to": [settings.report_recipient],
+            "to": recipients,
             "subject": subject,
             "html": html,
         },
