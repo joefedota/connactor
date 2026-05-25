@@ -281,10 +281,14 @@ async def _fetch_app_metrics_async(
         )
         new_user_rows = await conn.fetch(
             """
-            SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+            SELECT DATE(first_played AT TIME ZONE 'UTC') AS day,
                    COUNT(*) AS new_users
-            FROM users
-            WHERE created_at >= $1
+            FROM (
+                SELECT user_id, MIN(completed_at) AS first_played
+                FROM game_completions
+                GROUP BY user_id
+            ) sub
+            WHERE first_played >= $1
             GROUP BY day ORDER BY day
             """,
             prior_start_dt,
@@ -304,7 +308,15 @@ async def _fetch_app_metrics_async(
             start_dt, end_dt, prior_start_dt,
         )
         new_users_this_week = await conn.fetchval(
-            "SELECT COUNT(*) FROM users WHERE created_at >= $1 AND created_at < $2",
+            """
+            SELECT COUNT(*)
+            FROM (
+                SELECT user_id
+                FROM game_completions
+                GROUP BY user_id
+                HAVING MIN(completed_at) >= $1 AND MIN(completed_at) < $2
+            ) sub
+            """,
             start_dt, end_dt,
         )
         returning_this_week = await conn.fetchval(
@@ -319,7 +331,7 @@ async def _fetch_app_metrics_async(
             start_dt, end_dt,
         )
         total_users = await conn.fetchval(
-            "SELECT COUNT(*) FROM users WHERE created_at < $1",
+            "SELECT COUNT(DISTINCT user_id) FROM game_completions WHERE completed_at < $1",
             end_dt,
         )
     finally:
