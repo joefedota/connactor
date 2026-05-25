@@ -829,30 +829,16 @@ async def post_complete(request: Request, body: CompleteRequest):
             )
 
         path_ids_json = json.dumps(body.path_ids) if body.path_ids else None
-        try:
-            new_row = await session.execute(
-                text(
-                    """
-                    INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms, path_ids)
-                    VALUES (:uid, :pid, :hops, :time_ms, :path_ids::jsonb)
-                    RETURNING completion_id, completed_at
-                    """
-                ),
-                {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms, "path_ids": path_ids_json},
-            )
-        except Exception:
-            # path_ids column may not exist yet (migration pending) — fall back without it
-            await session.rollback()
-            new_row = await session.execute(
-                text(
-                    """
-                    INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms)
-                    VALUES (:uid, :pid, :hops, :time_ms)
-                    RETURNING completion_id, completed_at
-                    """
-                ),
-                {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms},
-            )
+        new_row = await session.execute(
+            text(
+                """
+                INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms, path_ids)
+                VALUES (:uid, :pid, :hops, :time_ms, :path_ids::jsonb)
+                RETURNING completion_id, completed_at
+                """
+            ),
+            {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms, "path_ids": path_ids_json},
+        )
         inserted = new_row.first()
         await session.commit()
 
