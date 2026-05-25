@@ -108,9 +108,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!game) return;
     try {
       if (game.isDailyChallenge && game.puzzleId) {
-        await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs });
+        const resp = await api.submitComplete({ puzzle_id: game.puzzleId, hops, time_ms: timeMs });
         const d = get().dailyData;
-        if (d) set({ dailyData: { ...d, already_completed: true } });
+        if (d) set({
+          dailyData: {
+            ...d,
+            already_completed: true,
+            completion: { hops: resp.hops, time_ms: resp.time_ms, completed_at: resp.completed_at },
+          },
+        });
       } else {
         // optimalHops is passed from the solve response at call sites; game.optimalHops
         // is only set for daily games, so we must use the passed-in value for random games.
