@@ -50,4 +50,5 @@
 .btn--sm {
   padding: 7px 16px;
   font-size: 14px;
+  white-space: nowrap;
 }
