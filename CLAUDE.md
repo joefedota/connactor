@@ -59,6 +59,15 @@ https://github.com/joefedota/connactor/projects
 - **Never use the word "optimal"** in any user-facing text (UI labels, copy, tooltips, messages). Use **"best answer"** instead.
 - **Sentence case everywhere** — all button labels, headings, tooltips, error messages, and any other user-facing text use sentence case. e.g. "New game" not "New Game", "How to play" not "How to Play", "Give up" not "Give Up".
 
+## Query testing
+
+**Always run new SQL and Cypher queries against a live database before committing.** Never rely solely on reading the query to verify correctness — syntax rules vary by DB version and errors only surface at runtime.
+
+- **Cypher**: run via `docker exec connactor-neo4j-dev cypher-shell -u neo4j -p connactorpassword "<query>"` with realistic parameters (real IDs, non-empty exclusion lists, edge cases).
+- **SQL**: run via `psql $DATABASE_URL -c "<query>"` or through the local Postgres container.
+
+Test at minimum: the happy path returns expected results, exclusion/filter params work, and edge cases (empty lists, no results) don't error.
+
 ## Code style rules
 
 - **No imports in function scope** unless absolutely necessary (e.g. breaking a circular import). All imports go at the top of the file.
