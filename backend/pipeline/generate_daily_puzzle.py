@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Daily puzzle generator — run once per day via Cloud Scheduler.
 
-Picks a medium-difficulty actor pair (both fame_rank 50–200) and upserts it
-into the puzzles table as tomorrow's daily puzzle.
+Picks an easy actor pair (both fame_rank 0–50, i.e. top-50 most famous) and
+upserts it into the puzzles table as tomorrow's daily puzzle. Pairs that have
+already been used as a daily puzzle (on any previous date) are excluded so the
+same matchup never repeats.
 
 Usage:
     cd backend
@@ -32,12 +34,18 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 50
-FAME_RANK_MIN = 50
-FAME_RANK_MAX = 200
+FAME_RANK_MIN = 0
+FAME_RANK_MAX = 50
 
 
-async def pick_pair(driver) -> tuple[int, int, int] | None:
-    """Return (source_id, target_id, optimal_hops) or None if no valid pair found."""
+async def pick_pair(
+    driver, excluded_pairs: set[tuple[int, int]]
+) -> tuple[int, int, int] | None:
+    """Return (source_id, target_id, optimal_hops) or None if no valid pair found.
+
+    excluded_pairs: set of (source_id, target_id) used in previous daily puzzles.
+    Both orderings are checked so (A, B) and (B, A) are treated as the same matchup.
+    """
     for _ in range(MAX_ATTEMPTS):
         async with driver.session() as session:
             result = await session.run(
@@ -54,7 +62,10 @@ async def pick_pair(driver) -> tuple[int, int, int] | None:
             )
             record = await result.single()
         if record:
-            return int(record["src"]), int(record["tgt"]), int(record["hops"])
+            src, tgt, hops = int(record["src"]), int(record["tgt"]), int(record["hops"])
+            if (src, tgt) not in excluded_pairs and (tgt, src) not in excluded_pairs:
+                return src, tgt, hops
+            logger.info("Skipping already-used pair (%d, %d) — retrying.", src, tgt)
     return None
 
 
@@ -79,8 +90,25 @@ async def main(target_date: datetime.date) -> None:
                 logger.info("Daily puzzle for %s already exists — skipping.", target_date)
                 return
 
-        logger.info("Picking pair for %s ...", target_date)
-        result = await pick_pair(driver)
+            # Load all previously used daily pairs so we never repeat a matchup.
+            used_rows = await session.execute(
+                text(
+                    """
+                    SELECT source_id, target_id FROM puzzles
+                    WHERE is_daily = TRUE AND scheduled_date < :d
+                    """
+                ),
+                {"d": target_date},
+            )
+            excluded_pairs: set[tuple[int, int]] = {
+                (row.source_id, row.target_id) for row in used_rows
+            }
+        logger.info(
+            "Picking pair for %s (excluding %d previously used pairs) ...",
+            target_date,
+            len(excluded_pairs),
+        )
+        result = await pick_pair(driver, excluded_pairs)
         if result is None:
             logger.error("Could not find a valid pair after %d attempts.", MAX_ATTEMPTS)
             sys.exit(1)
