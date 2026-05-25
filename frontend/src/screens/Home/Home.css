@@ -5,6 +5,8 @@
   min-height: 100dvh;
   padding: 24px;
   background: #FAF7F2;
+  --color-accent: #E4FF3C;
+  --color-on-accent: #333333;
 }
 
 .home__daily-link {

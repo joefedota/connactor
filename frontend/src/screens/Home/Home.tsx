@@ -42,10 +42,9 @@ function HowToPlayModal({ onClose }: { onClose: () => void }) {
 }
 
 const DIFFICULTIES = [
-  { id: 'random', label: 'Random', desc: 'Any difficulty' },
   { id: 'easy',   label: 'Easy',   desc: 'Hollywood A-listers' },
   { id: 'medium', label: 'Medium', desc: 'Well-known actors' },
-  { id: 'hard',   label: 'Hard',   desc: 'Character actors' },
+  { id: 'hard',   label: 'Hard',   desc: 'Lesser-known names' },
 ];
 
 const THEME = { bg: '#FAF7F2', accent: '#E4FF3C', onAccent: '#333333', text: '#444444' };
@@ -59,7 +58,7 @@ export function Home() {
 
   const handleStart = async (diffId: string) => {
     setLoadingDiff(diffId);
-    await fetchGame(diffId === 'random' ? undefined : diffId, THEME);
+    await fetchGame(diffId, THEME);
     document.body.style.transition = 'none';
     document.body.style.background = '#FAF7F2';
     navigate('/game');
@@ -105,7 +104,7 @@ export function Home() {
               ← Back
             </button>
 
-            <h2 className="home__picker-title">Choose Difficulty</h2>
+            <h2 className="home__picker-title">Choose difficulty</h2>
 
             <div className="home__difficulty-list">
               {DIFFICULTIES.map((d) => (
