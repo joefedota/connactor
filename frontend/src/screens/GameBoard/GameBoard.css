@@ -201,6 +201,12 @@
   color: #888888;
 }
 
+.game-board__give-up {
+  display: flex;
+  justify-content: center;
+  padding: 24px 20px 8px;
+}
+
 /* Difficulty Badges */
 .game-board__difficulty {
   display: inline-flex;

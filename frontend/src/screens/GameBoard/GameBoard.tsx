@@ -108,9 +108,6 @@ export function GameBoard() {
           <button className="game-board__help-btn" onClick={() => setShowHowTo(true)} aria-label="How to play">
             ?
           </button>
-          <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>
-            Give up
-          </button>
         </div>
       </header>
 
@@ -187,6 +184,12 @@ export function GameBoard() {
             ? `Type a movie that ${lastLabel} appeared in`
             : `Type an actor who appeared in ${lastLabel}`;
         })()}
+      </div>
+
+      <div className="game-board__give-up">
+        <button className="btn btn--ghost btn--sm" onClick={handleGiveUp}>
+          Give up
+        </button>
       </div>
 
       {showHowTo && <HowToPlayModal onClose={handleCloseHowTo} />}
