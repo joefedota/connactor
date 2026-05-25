@@ -313,7 +313,7 @@ async def post_solve(request: Request, body: SolveRequest):
                 WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
             END] AS path,
             length(p) AS hops
-            LIMIT 50
+            LIMIT 200
             """,
             source=int(body.source_id),
             target=int(body.target_id),
