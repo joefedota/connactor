@@ -58,7 +58,7 @@ export function Home() {
               className="home__daily-link"
               onClick={() => navigate('/daily')}
             >
-              ↩ Daily Challenge
+              ← Daily Challenge
             </button>
           </>
         ) : (
