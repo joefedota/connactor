@@ -43,6 +43,15 @@ https://github.com/joefedota/connactor
 ## Project board
 https://github.com/joefedota/connactor/projects
 
+## Brand colors
+
+| Name     | Hex       | Usage |
+|----------|-----------|-------|
+| Yellow   | `#E4FF3C` | Primary accent — buttons, badges, favicon background |
+| Charcoal | `#333333` | Primary text, icons, favicon letter |
+| Cream    | `#FAF7F2` | App background |
+| Purple   | `#C68DFE` | (reserved / unused in current UI) |
+
 ## Product copy rules
 
 - **Never use the word "optimal"** in any user-facing text (UI labels, copy, tooltips, messages). Use **"best answer"** instead.
