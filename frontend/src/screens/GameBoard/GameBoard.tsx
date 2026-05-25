@@ -192,7 +192,7 @@ export function GameBoard() {
         <div className="game-board__hint-section">
           {game.currentHint ? (
             <div className="game-board__hint-reveal">
-              <span className="game-board__hint-icon">💡</span>
+              <span className="game-board__hint-icon">Hint</span>
               <div onClick={() => handleSelect(game.currentHint!)} style={{ cursor: 'pointer' }}>
                 <NodeChip node={game.currentHint} noPhoto />
               </div>
@@ -204,7 +204,7 @@ export function GameBoard() {
             </div>
           ) : hintsLeft > 0 ? (
             <button className="game-board__hint-btn" onClick={() => requestHint()}>
-              💡 Get hint ({hintsLeft} left)
+              Get hint ({hintsLeft} left)
             </button>
           ) : (
             <span className="game-board__hints-used">

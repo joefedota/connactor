@@ -15,12 +15,14 @@ Local dry-run (prints HTML, skips email):
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import asyncpg
 import httpx
 from google.api_core.exceptions import GoogleAPIError, NotFound
 from google.cloud import bigquery
@@ -62,6 +64,23 @@ class DailyUsage:
     day: date
     visitors: int
     pageviews: int
+
+
+@dataclass
+class DailyAppMetrics:
+    day: date
+    dau: int        # distinct users who completed any puzzle
+    new_users: int  # users whose created_at fell on this day
+
+
+@dataclass
+class AppWeeklySummary:
+    wau_this: int             # distinct active users this week
+    wau_prior: int            # distinct active users prior week
+    new_users_this_week: int
+    returning_this_week: int  # active this week AND had activity before this week
+    total_users: int          # cumulative all-time
+    daily: list[DailyAppMetrics] = field(default_factory=list)  # last 7 days
 
 
 # ---------- GCP cost (BigQuery) ----------
@@ -237,6 +256,103 @@ def _cloudflare_graphql(zone_tag: str, token: str, start: date, end: date) -> li
     ]
 
 
+# ---------- app player metrics (Postgres) ----------
+
+async def _fetch_app_metrics_async(
+    db_url: str, start: date, end: date, prior_start: date
+) -> AppWeeklySummary:
+    dsn = db_url.replace("postgresql+asyncpg://", "postgresql://")
+    start_dt = datetime.combine(start, datetime.min.time(), timezone.utc)
+    # Use end of today (tomorrow midnight) so data from the current day is included.
+    end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), timezone.utc)
+    prior_start_dt = datetime.combine(prior_start, datetime.min.time(), timezone.utc)
+
+    conn = await asyncpg.connect(dsn)
+    try:
+        dau_rows = await conn.fetch(
+            """
+            SELECT DATE(completed_at AT TIME ZONE 'UTC') AS day,
+                   COUNT(DISTINCT user_id) AS dau
+            FROM game_completions
+            WHERE completed_at >= $1
+            GROUP BY day ORDER BY day
+            """,
+            prior_start_dt,
+        )
+        new_user_rows = await conn.fetch(
+            """
+            SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+                   COUNT(*) AS new_users
+            FROM users
+            WHERE created_at >= $1
+            GROUP BY day ORDER BY day
+            """,
+            prior_start_dt,
+        )
+        wau_row = await conn.fetchrow(
+            """
+            SELECT
+                COUNT(DISTINCT user_id) FILTER (
+                    WHERE completed_at >= $1 AND completed_at < $2
+                ) AS wau_this,
+                COUNT(DISTINCT user_id) FILTER (
+                    WHERE completed_at >= $3 AND completed_at < $1
+                ) AS wau_prior
+            FROM game_completions
+            WHERE completed_at >= $3 AND completed_at < $2
+            """,
+            start_dt, end_dt, prior_start_dt,
+        )
+        new_users_this_week = await conn.fetchval(
+            "SELECT COUNT(*) FROM users WHERE created_at >= $1 AND created_at < $2",
+            start_dt, end_dt,
+        )
+        returning_this_week = await conn.fetchval(
+            """
+            SELECT COUNT(DISTINCT user_id)
+            FROM game_completions
+            WHERE completed_at >= $1 AND completed_at < $2
+              AND user_id IN (
+                SELECT DISTINCT user_id FROM game_completions WHERE completed_at < $1
+              )
+            """,
+            start_dt, end_dt,
+        )
+        total_users = await conn.fetchval(
+            "SELECT COUNT(*) FROM users WHERE created_at < $1",
+            end_dt,
+        )
+    finally:
+        await conn.close()
+
+    dau_by_day = {r["day"]: int(r["dau"]) for r in dau_rows}
+    new_by_day = {r["day"]: int(r["new_users"]) for r in new_user_rows}
+
+    daily_metrics = [
+        DailyAppMetrics(
+            day=start + timedelta(days=i),
+            dau=dau_by_day.get(start + timedelta(days=i), 0),
+            new_users=new_by_day.get(start + timedelta(days=i), 0),
+        )
+        for i in range(8)  # start through today (end) inclusive
+    ]
+
+    return AppWeeklySummary(
+        wau_this=int(wau_row["wau_this"] or 0),
+        wau_prior=int(wau_row["wau_prior"] or 0),
+        new_users_this_week=int(new_users_this_week or 0),
+        returning_this_week=int(returning_this_week or 0),
+        total_users=int(total_users or 0),
+        daily=daily_metrics,
+    )
+
+
+def fetch_app_metrics(
+    db_url: str, start: date, end: date, prior_start: date
+) -> AppWeeklySummary:
+    return asyncio.run(_fetch_app_metrics_async(db_url, start, end, prior_start))
+
+
 # ---------- HTML render ----------
 
 def _fmt_pct(p: float | None) -> str:
@@ -274,6 +390,29 @@ def render_chart(daily: list[DailyUsage]) -> str:
     )
 
 
+def render_dau_chart(daily: list[DailyAppMetrics]) -> str:
+    if not daily:
+        return ""
+    max_val = max(d.dau for d in daily) or 1
+    bars = []
+    for d in daily:
+        h = max(2, int(d.dau / max_val * 100))
+        bars.append(
+            f'<td valign="bottom" style="padding:0 4px;text-align:center;min-width:40px;">'
+            f'<div style="font-size:11px;color:#444;font-weight:600;margin-bottom:4px;">{d.dau}</div>'
+            f'<div style="background:#333333;width:26px;height:{h}px;margin:0 auto;border-radius:3px 3px 0 0;"></div>'
+            f'<div style="font-size:10px;color:#888;margin-top:6px;">{d.day.strftime("%a")}</div>'
+            f'<div style="font-size:9px;color:#bbb;">{d.day.strftime("%m/%d")}</div>'
+            f'</td>'
+        )
+    return (
+        '<table cellspacing="0" cellpadding="0" align="center" '
+        'style="border-collapse:collapse;margin:16px auto;">'
+        f'<tr style="vertical-align:bottom;">{"".join(bars)}</tr>'
+        '</table>'
+    )
+
+
 def render_html(
     cost_rows: list[CostRow],
     daily: list[DailyUsage],
@@ -284,6 +423,7 @@ def render_html(
     ytd_total: float,
     start: date,
     end: date,
+    app: AppWeeklySummary | None = None,
 ) -> str:
     dau_delta = None
     if avg_dau_prior_visitors > 0:
@@ -315,13 +455,60 @@ def render_html(
         for d in daily
     )
 
+    # Players section — only rendered when app metrics are available
+    players_html = ""
+    if app is not None:
+        wau_delta: float | None = None
+        if app.wau_prior > 0:
+            wau_delta = (app.wau_this - app.wau_prior) / app.wau_prior
+        wau_drop_flagged = wau_delta is not None and wau_delta < -WOW_FLAG_THRESHOLD
+
+        dau_chart_html = render_dau_chart(app.daily)
+
+        app_daily_html = "".join(
+            f"<tr><td>{d.day.isoformat()}</td>"
+            f"<td style='text-align:right'>{d.dau:,}</td>"
+            f"<td style='text-align:right'>{d.new_users:,}</td></tr>"
+            for d in app.daily
+        )
+
+        returning_pct = (
+            f" ({app.returning_this_week / app.wau_this * 100:.0f}%)"
+            if app.wau_this > 0 else ""
+        )
+
+        players_html = f"""
+  <h3 style="margin-top:24px;">Players</h3>
+  <p style="margin:4px 0;">
+    <strong>Total players:</strong> {app.total_users:,}
+    <span style="color:#888;">(+{app.new_users_this_week} this week)</span>
+  </p>
+  <p style="margin:4px 0;">
+    <strong>WAU (last 7d):</strong> {app.wau_this:,}
+    <span style="color:{'#cc0000' if wau_drop_flagged else '#888'};">
+      ({'⚠ ' if wau_drop_flagged else ''}{_fmt_pct(wau_delta)} WoW, prior week: {app.wau_prior:,})
+    </span>
+  </p>
+  <p style="margin:4px 0;">
+    <strong>Returning players:</strong> {app.returning_this_week:,}{returning_pct} of this week's active players had played before
+  </p>
+
+  {dau_chart_html}
+
+  <table cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;margin-top:12px;font-size:14px;">
+    <thead><tr style="background:#f5f5f5;text-align:left;">
+      <th>Date</th><th style="text-align:right">Active players</th><th style="text-align:right">New players</th>
+    </tr></thead>
+    <tbody>{app_daily_html or '<tr><td colspan="3" style="color:#888;font-style:italic;">No completions this week</td></tr>'}</tbody>
+  </table>"""
+
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#222;max-width:640px;margin:0 auto;padding:24px;">
   <h2 style="margin:0 0 4px;">Connactor report — {(end - timedelta(days=1)).isoformat()}</h2>
   <div style="color:#888;margin-bottom:24px;">Rolling 7-day window: {start.isoformat()} – {(end - timedelta(days=1)).isoformat()} (UTC)</div>
-
-  <h3 style="margin-top:24px;">Usage</h3>
+{players_html}
+  <h3 style="margin-top:32px;">Web traffic</h3>
   <p style="margin:4px 0;">
     <strong>DAU (avg, last 7d):</strong> {avg_dau_visitors:,.1f} visitors/day · {avg_dau_pageviews:,.1f} pageviews/day
     <span style="color:{'#cc0000' if dau_drop_flagged else '#888'};">
@@ -364,7 +551,7 @@ def render_html(
 
   <p style="color:#888;font-size:12px;margin-top:32px;line-height:1.5;">
     Generated by <code>connactor-cost-report</code>. <code>⚠</code> = WoW change exceeds ±25%.<br>
-    Usage data via Cloudflare Web Analytics. WAU / YTD / retention metrics intentionally omitted — Cloudflare's free tier doesn't expose cross-day deduplication. See issue for proper analytics infra.
+    Player metrics from Neon Postgres. Web traffic via Cloudflare Web Analytics (unique visitors, not deduplicated cross-day).
   </p>
 </body></html>"""
 
@@ -438,6 +625,14 @@ def main() -> None:
     avg_dau_pageviews = (sum(d.pageviews for d in daily) / len(daily)) if daily else 0.0
     avg_dau_prior_visitors = (sum(d.visitors for d in daily_prior) / len(daily_prior)) if daily_prior else 0.0
 
+    try:
+        app_metrics = fetch_app_metrics(
+            settings.database_url, start=start, end=end, prior_start=prior_start
+        )
+    except Exception as e:
+        logger.warning("App metrics query failed — Players section will be omitted: %s", e)
+        app_metrics = None
+
     html = render_html(
         cost_rows, daily,
         avg_dau_visitors=avg_dau_visitors,
@@ -445,6 +640,7 @@ def main() -> None:
         avg_dau_prior_visitors=avg_dau_prior_visitors,
         mtd_total=mtd_total, ytd_total=ytd_total,
         start=start, end=end,
+        app=app_metrics,
     )
     subject = f"Connactor report — {(end - timedelta(days=1)).isoformat()}"
 
