@@ -69,7 +69,7 @@ async def pick_pair(
     return None
 
 
-async def main(target_date: datetime.date) -> None:
+async def main(target_date: datetime.date, force: bool = False) -> None:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -87,8 +87,10 @@ async def main(target_date: datetime.date) -> None:
                 {"d": target_date},
             )
             if existing.first():
-                logger.info("Daily puzzle for %s already exists — skipping.", target_date)
-                return
+                if not force:
+                    logger.info("Daily puzzle for %s already exists — skipping.", target_date)
+                    return
+                logger.info("Daily puzzle for %s already exists — forcing regeneration.", target_date)
 
             # Load all previously used daily pairs so we never repeat a matchup.
             used_rows = await session.execute(
@@ -117,6 +119,17 @@ async def main(target_date: datetime.date) -> None:
         logger.info("Selected: source=%d target=%d hops=%d", src, tgt, hops)
 
         async with session_factory() as session:
+            # Unmark any existing daily entry for this date so only one row is
+            # flagged is_daily=TRUE per scheduled_date after the insert.
+            await session.execute(
+                text(
+                    """
+                    UPDATE puzzles SET is_daily = FALSE, scheduled_date = NULL
+                    WHERE is_daily = TRUE AND scheduled_date = :d
+                    """
+                ),
+                {"d": target_date},
+            )
             await session.execute(
                 text(
                     """
@@ -143,6 +156,11 @@ if __name__ == "__main__":
         default=None,
         help="Target date YYYY-MM-DD (default: tomorrow UTC)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate even if a puzzle already exists for the target date",
+    )
     args = parser.parse_args()
 
     target = (
@@ -151,4 +169,4 @@ if __name__ == "__main__":
         else datetime.date.today() + datetime.timedelta(days=1)
     )
 
-    asyncio.run(main(target))
+    asyncio.run(main(target, force=args.force))
