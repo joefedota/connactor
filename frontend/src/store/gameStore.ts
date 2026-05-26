@@ -323,6 +323,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!game) return;
     try {
       const solveResp = await api.solve(game.source.id, game.target.id);
+      const isDaily = game.isDailyChallenge;
+      const puzzleId = game.puzzleId;
+      const partialHops = game.currentPath.length - 1;
       set({
         game: {
           ...game,
@@ -331,6 +334,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
           allPaths: solveResp.paths,
         },
       });
+      if (isDaily && puzzleId) {
+        const dOpt = get().dailyData;
+        if (dOpt) {
+          set({
+            dailyData: {
+              ...dOpt,
+              already_completed: true,
+              completion: { hops: partialHops, time_ms: null, completed_at: new Date().toISOString(), gave_up: true },
+            },
+          });
+        }
+        api.submitComplete({ puzzle_id: puzzleId, hops: partialHops, gave_up: true }).catch(() => null);
+      }
     } catch (e: unknown) {
       set({ endError: String(e) });
     }

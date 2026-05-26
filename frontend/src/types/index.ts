@@ -59,6 +59,7 @@ export interface CompletionInfo {
   hops: number;
   time_ms: number | null;
   completed_at: string;
+  gave_up?: boolean;
 }
 
 export interface DailyStats {
@@ -106,6 +107,7 @@ export interface CompleteRequest {
   hops: number;
   time_ms?: number;
   path_ids?: string[];
+  gave_up?: boolean;
 }
 
 export interface CompleteResponse {

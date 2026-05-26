@@ -58,6 +58,7 @@ class CompletionInfo(BaseModel):
     hops: int
     time_ms: Optional[int] = None
     completed_at: str
+    gave_up: bool = False
 
 
 class DailyResponse(BaseModel):
@@ -80,6 +81,7 @@ class CompleteRequest(BaseModel):
     hops: int
     time_ms: Optional[int] = None
     path_ids: Optional[List[str]] = None  # ordered actor/movie IDs; used for path uniqueness
+    gave_up: bool = False
 
 
 class CompleteResponse(BaseModel):
