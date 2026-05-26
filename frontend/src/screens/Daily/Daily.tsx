@@ -88,6 +88,42 @@ export function Daily() {
       </div>
     );
   }
+  if (resolvedDaily?.already_completed && resolvedDaily.completion?.gave_up) {
+    const { puzzle_date, optimal_hops, source, target, current_streak } = resolvedDaily;
+    const optimalActors = Math.ceil(optimal_hops / 2) - 1;
+    return (
+      <div className="daily">
+        <button className="daily__back btn btn--ghost" onClick={() => navigate('/')}>← Home</button>
+        <div className="daily__content">
+          <div className="daily__label">Daily challenge</div>
+          <h1 className="daily__date">{formatDate(puzzle_date)}</h1>
+          <div className="daily__pair">
+            <span className="daily__actor">{source.label}</span>
+            <span className="daily__arrow">→</span>
+            <span className="daily__actor">{target.label}</span>
+          </div>
+
+          <div className="daily__already-done">
+            <div className="daily__done-title">Better luck next time</div>
+            <div className="daily__optimal-info">Best answer: {optimalActors} actor{optimalActors !== 1 ? 's' : ''}</div>
+            {current_streak > 0 && (
+              <div className="daily__stats">
+                <div className="daily__stat">
+                  <span className="daily__stat-num">{current_streak}</span>
+                  <span className="daily__stat-label">streak</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {historyData && historyData.total > 0 && (
+            <DailyHistory data={historyData} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (resolvedDaily?.already_completed && resolvedDaily.completion) {
     const { puzzle_date, completion, optimal_hops, source, target, current_streak } = resolvedDaily;
     const today_stats = resolvedDaily.today_stats ?? null;

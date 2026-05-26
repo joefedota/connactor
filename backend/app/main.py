@@ -639,6 +639,7 @@ async def _compute_streak(session, user_id: str) -> int:
             WHERE gc.user_id = :uid
               AND p.is_daily = TRUE
               AND p.scheduled_date IS NOT NULL
+              AND gc.gave_up = FALSE
             ORDER BY p.scheduled_date DESC
             """
         ),
@@ -671,7 +672,7 @@ async def _get_completion_and_streak(user_id: str, puzzle_id: str) -> tuple:
         comp_row = await session.execute(
             text(
                 """
-                SELECT hops, time_ms, completed_at
+                SELECT hops, time_ms, completed_at, gave_up
                 FROM game_completions
                 WHERE user_id = :uid AND puzzle_id = :pid
                 """
@@ -734,7 +735,7 @@ async def get_daily(request: Request):
                         COUNT(*) FILTER (WHERE time_ms > :user_time AND time_ms IS NOT NULL) AS slower_than,
                         COUNT(*) FILTER (WHERE path_ids IS NOT NULL AND path_ids::text = :user_path) AS same_path
                     FROM game_completions
-                    WHERE puzzle_id = :pid
+                    WHERE puzzle_id = :pid AND gave_up = FALSE
                     """
                 ),
                 {
@@ -764,6 +765,7 @@ async def get_daily(request: Request):
             hops=comp.hops,
             time_ms=comp.time_ms,
             completed_at=comp.completed_at.isoformat(),
+            gave_up=comp.gave_up,
         ) if comp else None,
         current_streak=streak,
         today_stats=today_stats,
@@ -832,12 +834,12 @@ async def post_complete(request: Request, body: CompleteRequest):
         new_row = await session.execute(
             text(
                 """
-                INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms, path_ids)
-                VALUES (:uid, :pid, :hops, :time_ms, CAST(:path_ids AS jsonb))
+                INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms, path_ids, gave_up)
+                VALUES (:uid, :pid, :hops, :time_ms, CAST(:path_ids AS jsonb), :gave_up)
                 RETURNING completion_id, completed_at
                 """
             ),
-            {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms, "path_ids": path_ids_json},
+            {"uid": user_id, "pid": puzzle_id, "hops": body.hops, "time_ms": body.time_ms, "path_ids": path_ids_json, "gave_up": body.gave_up},
         )
         inserted = new_row.first()
         await session.commit()
@@ -868,6 +870,7 @@ async def get_daily_history(request: Request):
                 WHERE gc.user_id = :uid
                   AND p.is_daily = TRUE
                   AND p.scheduled_date IS NOT NULL
+                  AND gc.gave_up = FALSE
                 ORDER BY p.scheduled_date DESC
                 """
             ),
