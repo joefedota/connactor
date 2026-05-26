@@ -833,7 +833,7 @@ async def post_complete(request: Request, body: CompleteRequest):
             text(
                 """
                 INSERT INTO game_completions (user_id, puzzle_id, hops, time_ms, path_ids)
-                VALUES (:uid, :pid, :hops, :time_ms, :path_ids::jsonb)
+                VALUES (:uid, :pid, :hops, :time_ms, CAST(:path_ids AS jsonb))
                 RETURNING completion_id, completed_at
                 """
             ),
