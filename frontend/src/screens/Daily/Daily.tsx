@@ -67,9 +67,13 @@ export function Daily() {
   }, []);
 
   // Merge: use dailyData as the source of truth for completion status,
-  // but pull today_stats from the fresh server fetch (which has percentiles).
+  // but pull today_stats and current_streak from the fresh server fetch.
   const resolvedDaily = dailyData
-    ? { ...dailyData, today_stats: freshDaily?.today_stats ?? dailyData.today_stats }
+    ? {
+        ...dailyData,
+        today_stats: freshDaily?.today_stats ?? dailyData.today_stats,
+        current_streak: freshDaily?.current_streak ?? dailyData.current_streak,
+      }
     : freshDaily;
 
   if (isLoading || (!resolvedDaily && !endError)) {
