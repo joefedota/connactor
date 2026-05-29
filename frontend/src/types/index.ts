@@ -66,7 +66,7 @@ export interface DailyStats {
   answer_percentile: number;
   speed_percentile: number | null;
   path_uniqueness: number | null;
-  total_players_today: number;
+  other_players_today: number;
 }
 
 export interface DailyResponse {

@@ -181,7 +181,7 @@ export function Daily() {
               <div className="daily__optimal-info">Best possible: {optimalActors} actor{optimalActors !== 1 ? 's' : ''}</div>
             )}
 
-            {today_stats && today_stats.total_players_today >= 2 && (
+            {today_stats && today_stats.other_players_today >= 1 && (
               <div className="daily__percentile-row">
                 <div className="daily__percentile-pill">
                   <span className="daily__percentile-label">better than</span>

@@ -93,11 +93,15 @@ class CompleteResponse(BaseModel):
 
 
 class DailyStats(BaseModel):
-    """Percentile stats for today's puzzle — only populated when already_completed=True."""
-    answer_percentile: int        # better than X% of players today (by hop count)
-    speed_percentile: Optional[int] = None   # faster than X% (only if user has time_ms)
-    path_uniqueness: Optional[int] = None    # % of players who used the exact same path
-    total_players_today: int
+    """Percentile stats for today's puzzle — only populated when already_completed=True.
+
+    All counts exclude the user themselves, so percentiles describe how the user
+    compares against *other* players.
+    """
+    answer_percentile: int        # better than X% of other players (by hop count)
+    speed_percentile: Optional[int] = None   # faster than X% of other players (only if user has time_ms)
+    path_uniqueness: Optional[int] = None    # % of other players who used the exact same path
+    other_players_today: int      # count of other completions today (excludes the user)
 
 
 class DailyHistoryEntry(BaseModel):

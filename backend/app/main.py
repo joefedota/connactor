@@ -722,6 +722,8 @@ async def get_daily(request: Request):
     logger.info("TIMING /daily parallel(neo4j+pg_completion)=%.0fms", (time.perf_counter() - t1) * 1000)
 
     # Compute today's percentile stats when the user has already completed.
+    # All aggregates exclude the user themselves (user_id != :uid) so percentiles
+    # describe how the user compares against *other* players.
     today_stats: Optional[DailyStats] = None
     if comp is not None:
         async with get_session() as session:
@@ -735,11 +737,12 @@ async def get_daily(request: Request):
                         COUNT(*) FILTER (WHERE time_ms > :user_time AND time_ms IS NOT NULL) AS slower_than,
                         COUNT(*) FILTER (WHERE path_ids IS NOT NULL AND path_ids::text = :user_path) AS same_path
                     FROM game_completions
-                    WHERE puzzle_id = :pid AND gave_up = FALSE
+                    WHERE puzzle_id = :pid AND gave_up = FALSE AND user_id != :uid
                     """
                 ),
                 {
                     "pid": puzzle_id,
+                    "uid": user_id,
                     "user_hops": comp.hops,
                     "user_time": comp.time_ms if comp.time_ms is not None else -1,
                     "user_path": json.dumps(comp.path_ids) if hasattr(comp, "path_ids") and comp.path_ids else "[]",
@@ -751,7 +754,7 @@ async def get_daily(request: Request):
                 answer_percentile=math.floor(s.better_than / s.total * 100),
                 speed_percentile=math.floor(s.slower_than / s.has_time * 100) if s.has_time and comp.time_ms is not None else None,
                 path_uniqueness=math.floor(s.same_path / s.total * 100) if s.same_path else None,
-                total_players_today=s.total,
+                other_players_today=s.total,
             )
 
     return DailyResponse(
