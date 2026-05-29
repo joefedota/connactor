@@ -127,11 +127,12 @@ async def test_daily_already_completed(client):
     comp_result.first.return_value = comp_row
     session2.execute.side_effect = [comp_result, streak_result]
 
-    # Session 3: today_stats percentile query
+    # Session 3: today_stats percentile query — counts here are OTHER players only
+    # (the user themselves is excluded by `user_id != :uid` in the WHERE clause).
     session3 = AsyncMock()
     stats_row = MagicMock()
-    stats_row.total = 10
-    stats_row.better_than = 7
+    stats_row.total = 10        # 10 other players
+    stats_row.better_than = 7   # 7 of them had more hops than the user
     stats_row.has_time = 8
     stats_row.slower_than = 5
     stats_row.same_path = 2
@@ -149,8 +150,101 @@ async def test_daily_already_completed(client):
     assert body["current_streak"] == 1
     assert body["source"]["id"] == str(-3)
     assert body["target"]["id"] == str(-6)
-    assert body["today_stats"]["total_players_today"] == 10
+    assert body["today_stats"]["other_players_today"] == 10
     assert body["today_stats"]["answer_percentile"] == 70  # floor(7/10 * 100)
+
+
+@pytest.mark.anyio
+async def test_daily_stats_two_player_winner_sees_100_percent(client):
+    """In a 2-player puzzle, the winner sees 100% — not 50% — because the user is
+    excluded from both numerator and denominator. Regression test for #144."""
+    import uuid as _uuid
+
+    puzzle_id = _uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002")
+    today = datetime.date.today()
+
+    session1 = AsyncMock()
+    puzzle_row = MagicMock(
+        puzzle_id=puzzle_id, source_id=-3, target_id=-6, optimal_hops=2
+    )
+    puzzle_row_result = MagicMock()
+    puzzle_row_result.first.return_value = puzzle_row
+    session1.execute.return_value = puzzle_row_result
+
+    session2 = AsyncMock()
+    comp_row = MagicMock(
+        hops=2,
+        time_ms=10000,
+        completed_at=datetime.datetime(2026, 5, 24, 12, 0, 0),
+        path_ids=None,
+    )
+    streak_result = MagicMock()
+    streak_result.__iter__ = lambda self: iter([(today,)])
+    comp_result = MagicMock()
+    comp_result.first.return_value = comp_row
+    session2.execute.side_effect = [comp_result, streak_result]
+
+    # One other player, who did worse on both hops and time.
+    session3 = AsyncMock()
+    stats_row = MagicMock(
+        total=1, better_than=1, has_time=1, slower_than=1, same_path=0
+    )
+    stats_result = MagicMock()
+    stats_result.first.return_value = stats_row
+    session3.execute.return_value = stats_result
+
+    with _mock_pg(session1, session2, session3):
+        resp = await client.get("/daily")
+
+    body = resp.json()
+    assert body["today_stats"]["other_players_today"] == 1
+    assert body["today_stats"]["answer_percentile"] == 100
+    assert body["today_stats"]["speed_percentile"] == 100
+
+
+@pytest.mark.anyio
+async def test_daily_stats_user_alone_returns_no_stats(client):
+    """When the user is the only completion, today_stats is None — no peers to compare."""
+    import uuid as _uuid
+
+    puzzle_id = _uuid.UUID("aaaaaaaa-0000-0000-0000-000000000003")
+    today = datetime.date.today()
+
+    session1 = AsyncMock()
+    puzzle_row = MagicMock(
+        puzzle_id=puzzle_id, source_id=-3, target_id=-6, optimal_hops=2
+    )
+    puzzle_row_result = MagicMock()
+    puzzle_row_result.first.return_value = puzzle_row
+    session1.execute.return_value = puzzle_row_result
+
+    session2 = AsyncMock()
+    comp_row = MagicMock(
+        hops=2,
+        time_ms=10000,
+        completed_at=datetime.datetime(2026, 5, 24, 12, 0, 0),
+        path_ids=None,
+    )
+    streak_result = MagicMock()
+    streak_result.__iter__ = lambda self: iter([(today,)])
+    comp_result = MagicMock()
+    comp_result.first.return_value = comp_row
+    session2.execute.side_effect = [comp_result, streak_result]
+
+    # Zero other players.
+    session3 = AsyncMock()
+    stats_row = MagicMock(
+        total=0, better_than=0, has_time=0, slower_than=0, same_path=0
+    )
+    stats_result = MagicMock()
+    stats_result.first.return_value = stats_row
+    session3.execute.return_value = stats_result
+
+    with _mock_pg(session1, session2, session3):
+        resp = await client.get("/daily")
+
+    body = resp.json()
+    assert body["today_stats"] is None
 
 
 # ── POST /complete ─────────────────────────────────────────────────────────
