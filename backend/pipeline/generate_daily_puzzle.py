@@ -4,7 +4,10 @@
 Picks an easy actor pair (both fame_rank 0–50, i.e. top-50 most famous) and
 upserts it into the puzzles table as tomorrow's daily puzzle. Pairs that have
 already been used as a daily puzzle (on any previous date) are excluded so the
-same matchup never repeats.
+same matchup never repeats, and any actor who appeared in a daily within the
+last ACTOR_EXCLUDE_DAYS days is excluded so the same face doesn't recur week
+to week. If the actor exclusion leaves no valid pair, the picker falls back to
+pair-only exclusion so the job always produces a puzzle.
 
 Usage:
     cd backend
@@ -36,21 +39,29 @@ logger = logging.getLogger(__name__)
 MAX_ATTEMPTS = 50
 FAME_RANK_MIN = 0
 FAME_RANK_MAX = 50
+# Actors used in a daily within this many days are excluded from the pick.
+# With a 50-actor pool a 14-day window excludes at most 28, leaving 22+.
+ACTOR_EXCLUDE_DAYS = 14
 
 
 async def pick_pair(
-    driver, excluded_pairs: set[tuple[int, int]]
+    driver,
+    excluded_pairs: set[tuple[int, int]],
+    excluded_actors: set[int] = frozenset(),
 ) -> tuple[int, int, int] | None:
     """Return (source_id, target_id, optimal_hops) or None if no valid pair found.
 
     excluded_pairs: set of (source_id, target_id) used in previous daily puzzles.
     Both orderings are checked so (A, B) and (B, A) are treated as the same matchup.
+    excluded_actors: person_ids barred from either slot (recent daily appearances).
     """
     for _ in range(MAX_ATTEMPTS):
         async with driver.session() as session:
             result = await session.run(
                 """
-                MATCH (a:Actor) WHERE a.fame_rank >= $min_rank AND a.fame_rank < $max_rank
+                MATCH (a:Actor)
+                WHERE a.fame_rank >= $min_rank AND a.fame_rank < $max_rank
+                  AND NOT a.person_id IN $excluded_actors
                 WITH a ORDER BY rand() LIMIT 2
                 WITH collect(a) AS actors WHERE size(actors) = 2
                 WITH actors[0] AS source, actors[1] AS target
@@ -59,6 +70,7 @@ async def pick_pair(
                 """,
                 min_rank=FAME_RANK_MIN,
                 max_rank=FAME_RANK_MAX,
+                excluded_actors=list(excluded_actors),
             )
             record = await result.single()
         if record:
@@ -105,12 +117,40 @@ async def main(target_date: datetime.date, force: bool = False) -> None:
             excluded_pairs: set[tuple[int, int]] = {
                 (row.source_id, row.target_id) for row in used_rows
             }
+
+            # Actors who appeared in a recent daily sit out for the window.
+            recent_rows = await session.execute(
+                text(
+                    """
+                    SELECT source_id, target_id FROM puzzles
+                    WHERE is_daily = TRUE
+                      AND scheduled_date >= :window_start
+                      AND scheduled_date < :d
+                    """
+                ),
+                {
+                    "window_start": target_date
+                    - datetime.timedelta(days=ACTOR_EXCLUDE_DAYS),
+                    "d": target_date,
+                },
+            )
+            excluded_actors: set[int] = set()
+            for row in recent_rows:
+                excluded_actors.add(row.source_id)
+                excluded_actors.add(row.target_id)
         logger.info(
-            "Picking pair for %s (excluding %d previously used pairs) ...",
+            "Picking pair for %s (excluding %d previously used pairs, %d recent actors) ...",
             target_date,
             len(excluded_pairs),
+            len(excluded_actors),
         )
-        result = await pick_pair(driver, excluded_pairs)
+        result = await pick_pair(driver, excluded_pairs, excluded_actors)
+        if result is None and excluded_actors:
+            logger.warning(
+                "No valid pair with %d recent actors excluded — retrying with pair exclusion only.",
+                len(excluded_actors),
+            )
+            result = await pick_pair(driver, excluded_pairs)
         if result is None:
             logger.error("Could not find a valid pair after %d attempts.", MAX_ATTEMPTS)
             sys.exit(1)

@@ -91,6 +91,7 @@
 - [ ] localStorage identity recovery — restore `user_id` for users whose cookie lapsed >7 days (follow-up to #147)
 - [x] Game completion tracking — all game completions recorded against puzzle + user — issue #44
 - [x] Pre-generate curated daily pair — `bin/generate_daily_puzzle.py` Cloud Run Job — issue #44
+- [x] Daily actor diversity — exclude actors used in dailies within the last 14 days — issue #149
 - [x] `GET /daily` endpoint returning today's pair + user completion status + streak — issue #44
 - [x] `POST /complete` unified completion endpoint (daily + random) — issue #44
 - [x] Share result with date stamp — issue #44
