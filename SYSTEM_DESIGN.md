@@ -86,7 +86,7 @@ game_completions(
 )
 ```
 
-**Anonymous identity**: HTTPOnly cookie signed with `itsdangerous.URLSafeSerializer`. Created on first request, persists 2 years. No login required.
+**Anonymous identity**: HTTPOnly cookie signed with `itsdangerous.URLSafeSerializer`. Created on first request with a 2-year `max_age` and **re-set on every response**. The refresh matters: `api.connactor.com` is a CNAME to `ghs.googlehosted.com`, and Safari ITP's CNAME-cloaking defense caps cookies from such hosts to 7 days per set — without the refresh, Safari/iOS users lost their identity (and all stats) 7 days after first visit (#147). No login required.
 
 ---
 
