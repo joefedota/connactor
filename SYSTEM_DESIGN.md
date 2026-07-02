@@ -279,7 +279,7 @@ Setup is captured in [`docs/ops/setup-cloudflare.md`](./ops/setup-cloudflare.md)
 
 ### Cost + usage monitoring
 
-A separate Cloud Run Job (`connactor-daily-puzzle`, triggered every day at 06:00 UTC) runs `pipeline/generate_daily_puzzle.py`. It picks two random actors from the medium fame tier (`fame_rank` 50–200), verifies a path exists between them, and upserts the pair into the `puzzles` table with `is_daily=TRUE` and `scheduled_date = tomorrow (UTC)`. The job is idempotent — if tomorrow's puzzle already exists it skips silently. Setup runbook: [`docs/ops/setup-daily-puzzle-job.md`](./ops/setup-daily-puzzle-job.md).
+A separate Cloud Run Job (`connactor-daily-puzzle`, triggered every day at 06:00 UTC) runs `pipeline/generate_daily_puzzle.py`. It picks two random actors from the top fame tier (`fame_rank` 0–50), verifies a path exists between them, and upserts the pair into the `puzzles` table with `is_daily=TRUE` and `scheduled_date = tomorrow (UTC)`. Previously used matchups never repeat, and any actor who appeared in a daily within the last 14 days is excluded from the pick (falling back to pair-only exclusion if that empties the pool), so the same face never recurs week to week (#149). The job is idempotent — if tomorrow's puzzle already exists it skips silently. Setup runbook: [`docs/ops/setup-daily-puzzle-job.md`](./ops/setup-daily-puzzle-job.md).
 
 A daily Cloud Run Job (`connactor-cost-report`, triggered every day at 14:00 UTC by Cloud Scheduler) builds a single HTML email summarising the rolling 7-day window vs the week before. Three data sources, one Resend POST:
 
