@@ -86,6 +86,9 @@
 
 - [x] Generalized puzzle persistence — every played pair becomes a persisted puzzle with UUID — issue #44
 - [x] Anonymous user identity — itsdangerous-signed HTTPOnly cookie — issue #44
+- [x] Refresh identity cookie on every response — Safari ITP caps CNAME-cloaked cookies to 7 days — issue #147
+- [ ] Remove CNAME cloaking — proxy `api.connactor.com` through first-party domain so Safari treats API cookies as first-party (follow-up to #147)
+- [ ] localStorage identity recovery — restore `user_id` for users whose cookie lapsed >7 days (follow-up to #147)
 - [x] Game completion tracking — all game completions recorded against puzzle + user — issue #44
 - [x] Pre-generate curated daily pair — `bin/generate_daily_puzzle.py` Cloud Run Job — issue #44
 - [x] `GET /daily` endpoint returning today's pair + user completion status + streak — issue #44

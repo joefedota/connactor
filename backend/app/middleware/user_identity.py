@@ -64,13 +64,17 @@ class UserIdentityMiddleware(BaseHTTPMiddleware):
             except Exception:
                 logger.exception("Failed to upsert user row for %s", user_id)
 
-            response.set_cookie(
-                _COOKIE_NAME,
-                _sign(user_id),
-                max_age=_COOKIE_MAX_AGE,
-                httponly=True,
-                samesite="lax",
-                secure=settings.cookie_secure,
-            )
+        # Re-set the cookie on every response, not just for new users. Safari
+        # ITP caps cookies from CNAME-cloaked hosts (api.connactor.com ->
+        # ghs.googlehosted.com) to 7 days per set; refreshing slides that
+        # window so active players never lose their identity. See #147.
+        response.set_cookie(
+            _COOKIE_NAME,
+            _sign(user_id),
+            max_age=_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=settings.cookie_secure,
+        )
 
         return response
