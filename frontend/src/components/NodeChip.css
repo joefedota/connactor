@@ -7,7 +7,11 @@
   border-radius: 28px;
   font-size: 15px;
   font-weight: 600;
-  white-space: nowrap;
+  /* Long labels (e.g. full movie titles on mobile) wrap instead of
+     stretching the chip past the viewport edge. min-width: 0 lets the
+     chip shrink below its content width inside flex rows. */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .node-chip--peekable {
@@ -16,6 +20,8 @@
 
 .node-chip__label {
   overflow: visible;
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 
 .node-chip__year {

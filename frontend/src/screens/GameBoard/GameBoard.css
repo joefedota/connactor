@@ -123,7 +123,6 @@
 /* Chain */
 .game-board__chain {
   padding: 16px 20px 0;
-  overflow-x: auto;
 }
 
 .game-board__chain-scroll {
