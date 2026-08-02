@@ -210,5 +210,10 @@ export function Daily() {
     );
   }
 
-  return null;
+  // resolvedDaily exists but not completed — useEffect will navigate to /game
+  return (
+    <div className="daily">
+      <div className="daily__loading">Loading daily puzzle...</div>
+    </div>
+  );
 }
