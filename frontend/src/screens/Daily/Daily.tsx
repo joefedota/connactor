@@ -79,7 +79,7 @@ export function Daily() {
   if (isLoading || (!resolvedDaily && !endError)) {
     return (
       <div className="daily">
-        <div className="daily__loading">Loading today's puzzle…</div>
+        <div className="daily__loading">Loading daily puzzle...</div>
       </div>
     );
   }
@@ -215,12 +215,5 @@ export function Daily() {
     );
   }
 
-  return (
-    <div className="daily">
-      <div className="daily__loading">Setting up today's puzzle…</div>
-      <button className="daily__skip" onClick={handleSkip}>
-        Skip today
-      </button>
-    </div>
-  );
+  return null;
 }
