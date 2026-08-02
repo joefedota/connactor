@@ -38,15 +38,10 @@ function buildShareText(
 
 export function Daily() {
   const navigate = useNavigate();
-  const { fetchDailyGame, dismissDaily, isLoading, endError, dailyData } = useGameStore();
+  const { fetchDailyGame, isLoading, endError, dailyData } = useGameStore();
   const started = useRef(false);
   const [historyData, setHistoryData] = useState<DailyHistoryResponse | null>(null);
   const [freshDaily, setFreshDaily] = useState<DailyResponse | null>(null);
-
-  const handleSkip = () => {
-    dismissDaily();
-    navigate('/', { replace: true });
-  };
 
   useEffect(() => {
     document.body.style.background = '#FAF7F2';
