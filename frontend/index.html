@@ -17,9 +17,16 @@
     <meta name="twitter:description" content="Connect two actors through shared movies in as few steps as possible." />
     <meta name="twitter:image" content="https://connactor.com/og-image.png" />
     <title>Connactor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#FAF7F2;font-family:'Hanken Grotesk',sans-serif;color:#888;font-size:1rem;">
+        Loading daily puzzle...
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

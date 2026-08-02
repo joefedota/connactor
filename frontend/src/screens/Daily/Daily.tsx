@@ -38,15 +38,10 @@ function buildShareText(
 
 export function Daily() {
   const navigate = useNavigate();
-  const { fetchDailyGame, dismissDaily, isLoading, endError, dailyData } = useGameStore();
+  const { fetchDailyGame, isLoading, endError, dailyData } = useGameStore();
   const started = useRef(false);
   const [historyData, setHistoryData] = useState<DailyHistoryResponse | null>(null);
   const [freshDaily, setFreshDaily] = useState<DailyResponse | null>(null);
-
-  const handleSkip = () => {
-    dismissDaily();
-    navigate('/', { replace: true });
-  };
 
   useEffect(() => {
     document.body.style.background = '#FAF7F2';
@@ -79,7 +74,7 @@ export function Daily() {
   if (isLoading || (!resolvedDaily && !endError)) {
     return (
       <div className="daily">
-        <div className="daily__loading">Loading today's puzzle…</div>
+        <div className="daily__loading">Loading daily puzzle...</div>
       </div>
     );
   }
@@ -215,12 +210,5 @@ export function Daily() {
     );
   }
 
-  return (
-    <div className="daily">
-      <div className="daily__loading">Setting up today's puzzle…</div>
-      <button className="daily__skip" onClick={handleSkip}>
-        Skip today
-      </button>
-    </div>
-  );
+  return null;
 }
