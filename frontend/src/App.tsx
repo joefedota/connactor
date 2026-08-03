@@ -32,7 +32,9 @@ function RootRedirect() {
 
   if (checking) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', background: '#FAF7F2' }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', background: '#FAF7F2', fontFamily: "'Hanken Grotesk', sans-serif", color: '#888', fontSize: '1rem' }}>
+        Loading daily puzzle...
+      </div>
     );
   }
 
@@ -40,6 +42,10 @@ function RootRedirect() {
 }
 
 export function App() {
+  useEffect(() => {
+    document.getElementById('app-loading')?.remove();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
