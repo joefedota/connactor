@@ -315,7 +315,7 @@ async def post_solve(request: Request, body: SolveRequest):
                 (a1:Actor {person_id: $source})-[:APPEARED_IN*..12]-(a2:Actor {person_id: $target})
             )
             WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
-              OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
+              OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, []) AND NOT 10402 IN coalesce(n.genre_ids, [])))
             RETURN [n IN nodes(p) | CASE labels(n)[0]
                 WHEN 'Actor' THEN {type: 'actor', id: toString(n.person_id), label: n.name,  popularity: n.popularity, image_path: n.profile_path, fame_rank: n.fame_rank}
                 WHEN 'Movie' THEN {type: 'movie', id: toString(n.movie_id),  label: n.title, year: toString(n.year), image_path: n.poster_path}
@@ -365,7 +365,7 @@ async def post_hint(request: Request, body: HintRequest):
                     (last:Actor {person_id: $last_id})-[:APPEARED_IN*..12]-(t:Actor {person_id: $target_id})
                 )
                 WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
-                  OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
+                  OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, []) AND NOT 10402 IN coalesce(n.genre_ids, [])))
                 WITH nodes(p)[1] AS m
                 WHERE NOT toString(m.movie_id) IN $excluded
                 WITH DISTINCT m ORDER BY m.vote_count DESC
@@ -383,7 +383,7 @@ async def post_hint(request: Request, body: HintRequest):
                 result = await session.run(
                     """
                     MATCH (a:Actor {person_id: $last_id})-[:APPEARED_IN]->(m:Movie)
-                    WHERE coalesce(m.vote_count, 0) >= 100 AND NOT 99 IN coalesce(m.genre_ids, [])
+                    WHERE coalesce(m.vote_count, 0) >= 100 AND NOT 99 IN coalesce(m.genre_ids, []) AND NOT 10402 IN coalesce(m.genre_ids, [])
                     AND NOT toString(m.movie_id) IN $excluded
                     RETURN {type: 'movie', id: toString(m.movie_id), label: m.title,
                             year: toString(m.year), image_path: m.poster_path} AS hint
@@ -400,7 +400,7 @@ async def post_hint(request: Request, body: HintRequest):
                 MATCH (m:Movie {movie_id: $last_id})<-[:APPEARED_IN]-(a:Actor),
                       p = allShortestPaths((a)-[:APPEARED_IN*..12]-(t:Actor {person_id: $target_id}))
                 WHERE all(n IN nodes(p) WHERE 'Actor' IN labels(n)
-                  OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, [])))
+                  OR (coalesce(n.vote_count, 0) >= 100 AND NOT 99 IN coalesce(n.genre_ids, []) AND NOT 10402 IN coalesce(n.genre_ids, [])))
                 AND NOT toString(a.person_id) IN $excluded
                 WITH a, length(p) AS hops
                 ORDER BY hops ASC, a.fame_rank ASC
@@ -469,6 +469,8 @@ async def get_autocomplete(
                     """
                     CALL db.index.fulltext.queryNodes('movieTitles', $search)
                     YIELD node, score
+                    WHERE NOT 99 IN coalesce(node.genre_ids, [])
+                      AND NOT 10402 IN coalesce(node.genre_ids, [])
                     RETURN node.movie_id AS id, node.title AS label,
                            node.year AS year, node.vote_count AS vote_count,
                            node.poster_path AS image_path
@@ -533,7 +535,9 @@ async def get_autocomplete_neighbors(
             # node_id is an actor — fetch their movies
             cypher = """
                 MATCH (a:Actor {person_id: $node_id})-[:APPEARED_IN]->(m:Movie)
-                WHERE $q = '' OR toLower(m.title) CONTAINS toLower($q)
+                WHERE ($q = '' OR toLower(m.title) CONTAINS toLower($q))
+                  AND NOT 99 IN coalesce(m.genre_ids, [])
+                  AND NOT 10402 IN coalesce(m.genre_ids, [])
                 RETURN m.movie_id AS id, m.title AS label, m.year AS year, m.vote_count AS vote_count,
                        m.poster_path AS image_path
                 ORDER BY m.vote_count DESC
