@@ -47,9 +47,11 @@ services:
       - /data/dumps:/dumps
     environment:
       - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
-      - NEO4J_dbms_memory_heap_initial__size=4g
-      - NEO4J_dbms_memory_heap_max__size=4g
-      - NEO4J_dbms_memory_pagecache_size=6g
+      # Sized by `neo4j-admin server memory-recommendation --memory=4g`.
+      - NEO4J_server_memory_heap_initial__size=2g
+      - NEO4J_server_memory_heap_max__size=2g
+      - NEO4J_server_memory_pagecache_size=512m
+      - NEO4J_server_jvm_additional=-XX:+ExitOnOutOfMemoryError
 YAML
 
 # 5. Start Neo4j.

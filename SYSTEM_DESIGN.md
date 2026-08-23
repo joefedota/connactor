@@ -241,8 +241,8 @@ Serve TMDB image URLs directly from the frontend in the first iteration. Proxy t
 
 | Service | Where | Cost |
 |---|---|---|
-| Neo4j Community Edition | GCP Compute Engine e2-highmem-2 (2 vCPU, 16 GB RAM) | ~$48/mo |
-| Persistent disk (100 GB SSD) | Attached to Neo4j VM | ~$17/mo |
+| Neo4j Community Edition | GCP Compute Engine e2-medium (shared-core, 4 GB RAM) | ~$24.50/mo |
+| Persistent disk (20 GB balanced) | Attached to Neo4j VM | ~$2/mo |
 | Static IP | GCP reserved | ~$7/mo |
 | Redis | Same VM via Docker Compose | $0 |
 | FastAPI | Cloud Run (stateless, VPC Direct Egress → VM) | ~$0–10/mo |
