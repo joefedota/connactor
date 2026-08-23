@@ -36,7 +36,7 @@
 **Goal:** API on Cloud Run, database server on Compute Engine, secrets in Secret Manager, automated deploys.
 
 - [x] Enable GCP APIs (Cloud Run, Artifact Registry, Secret Manager, Compute Engine)
-- [x] Compute Engine VM (e2-highmem-2) + 100 GB persistent disk + daily snapshot schedule
+- [x] Rightsized Compute Engine VM (e2-medium) + 20 GB balanced persistent disk + daily snapshot schedule
 - [x] Docker Compose on VM for Neo4j (Redis deferred — backlogged with #8 pair pool)
 - [x] VPC networking: Cloud Run Direct VPC Egress → VM (Neo4j :7687 internal only)
 - [x] GCP Secret Manager: create secrets, bind to Cloud Run service account via IAM
